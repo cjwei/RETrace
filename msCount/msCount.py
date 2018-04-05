@@ -6,7 +6,7 @@ from count_visualizer import plotCounts
 import pysam
 
 '''
-Usage: python script.py --probes probes.info.txt --input input.sorted.bam
+Usage: python script.py --probes probes.info.txt --bam input.sorted.bam
 This script will take as input:
     1) probes.info.txt = contains all the probes designed per targetID
     2) input.sorted.bam = sorted bam file containing mapping results against hg19
