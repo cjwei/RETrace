@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import argparse
 
 '''
@@ -16,7 +16,7 @@ def makeBed():
     parser.add_argument('--probes', action="store", dest="probe_file", help="File containing hybridization probe targets")
     parser.add_argument('--output', action="store", dest="output_file")
     args = parser.parse_args()
-    
+
     output = open(args.output_file,"w")
     with open(args.probe_file) as f:
         for line in f:
@@ -26,17 +26,17 @@ def makeBed():
             chrom = "_".join(info_list[0:len(info_list)-3])
             chromStart = info_list[-3]
             chromEnd = info_list[-2]
-            
+
             #Obtain subunit information and reformat targetID
             (num_sub,sub_seq) = info_list[-1].split('x')
             targetID = chrom + ":" + chromStart + "-" + chromEnd + "_" + info_list[-1]
-            
-            
+
+
             #Print relevant information in bed format
             output.write(chrom + "\t" + chromStart + "\t" + chromEnd + "\t"
                          + str(len(sub_seq)) + "\t" + num_sub + "\t" + targetID + "\n")
     output.close()
-    
+
 #%%
 if __name__ == "__main__":
     makeBed()

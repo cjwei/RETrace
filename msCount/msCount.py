@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import argparse
 from importer import parseProbes
 from counter import counter
@@ -22,10 +22,10 @@ def msCount():
     parser.add_argument('--counter', action="store", dest="count_type", default="simple", help="Method for microsatellite subunit counting (default: simple, aln)")
     parser.add_argument('--plot_file', action="store", dest="plot_file", default=None, help="Specify output plot_file if you want to plot msCounts for each target")
     args = parser.parse_args()
-    
+
     #Import targetDict from probe_file
     targetDict = parseProbes(args.probe_file)
-    
+
     #Perform msCount for each targetID within targetDict
     samfile = pysam.AlignmentFile(args.input_bam, "rb")
     for targetID in sorted(targetDict.keys()):
@@ -38,11 +38,11 @@ def msCount():
             if len(count_list)>=args.num_reads:
                 targetDict[targetID]["count_list"] = count_list
     samfile.close()
-    
+
     #Visualize msCounts
     if args.plot_file is not None:
         plotCounts(args.plot_file, targetDict)
-    
+
 #%%
 if __name__ == "__main__":
     msCount()
