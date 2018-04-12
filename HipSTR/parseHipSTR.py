@@ -4,6 +4,7 @@ import collections
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.ticker import MaxNLocator
+from itertools import cycle
 
 '''
 Usage: python script.py input1.vcf input2.vcf... --output plots.pdf
@@ -30,34 +31,40 @@ def parseVCF(file_list):
                 allelotype = info_list[1].split('|')
                 allele_list = []
                 count_list = []
-                for allele_info in info_list[-1].split(';'):
-                    [allele,count] = allele_info.split('|')
-                    allele_list.append(int(allele))
-                    count_list.append(int(count))
-                if targetID not in alleleDict.keys():
-                    alleleDict[targetID] = {}
-                alleleDict[targetID][f.name] = {}
-                alleleDict[targetID][f.name]["allelotype"] = list(map(int,allelotype))
-                alleleDict[targetID][f.name]["allele_list"] = allele_list
-                alleleDict[targetID][f.name]["count_freq"] = [float(num)/float(sum(count_list)) for num in count_list]
+                if info_list[-1]!='.':
+                    for allele_info in info_list[-1].split(';'):
+                        [allele,count] = allele_info.split('|')
+                        allele_list.append(int(allele))
+                        count_list.append(int(count))
+                    if targetID not in alleleDict.keys():
+                        alleleDict[targetID] = {}
+                    alleleDict[targetID][f.name] = {}
+                    alleleDict[targetID][f.name]["allelotype"] = list(map(int,allelotype))
+                    alleleDict[targetID][f.name]["allele_list"] = allele_list
+                    alleleDict[targetID][f.name]["count_freq"] = [float(num)/float(sum(count_list)) for num in count_list]
     return alleleDict
 
 def plotVCF(alleleDict, file_list, plot_file):
     plots = PdfPages(plot_file)
+    color_options = ['xkcd:pale green','xkcd:pale blue','xkcd:light grey','xkcd:pale pink']
+    color_cycle = cycle(color_options)
+    next_color = next(color_cycle)
     for targetID in sorted(alleleDict.keys()):
+        if len(alleleDict[targetID].keys())>=2:
+            select_color, next_color = next_color, next(color_cycle)
+        else:
+            select_color = 'xkcd:white'
         for file_name in sorted(alleleDict[targetID].keys()):
             #Plot raw alleles/msCounts (blue) along with final allelotypes (red)
             ax = plt.gca()
             ax.set_ylim([0,1])
             ax.set_xlim([min(alleleDict[targetID][file_name]["allele_list"])-5,max(alleleDict[targetID][file_name]["allele_list"])+5])
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-            ax.xlabel("Base pair differences of alleles from reference")
             plt.plot(alleleDict[targetID][file_name]["allelotype"],[0.5]*len(alleleDict[targetID][file_name]["allelotype"]),'ro')
             plt.vlines(alleleDict[targetID][file_name]["allele_list"],[0],alleleDict[targetID][file_name]["count_freq"],linestyle="dashed",color="b")
             plt.title(targetID + ", " + file_name)
 
-            if len(alleleDict[targetID].keys()) == len(file_list):
-                ax.set_facecolor('xkcd:light grey')
+            ax.set_facecolor(select_color)
             plt.savefig(plots, format='pdf')
             plt.clf()
 
