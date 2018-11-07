@@ -4,3 +4,4 @@ This repo contains multiple tools to perform retrospective lineage tracing and c
 - **msCount**: This directory contains the scripts necessary to call microsatellite counts from each single cell.  This uses a custom-built script for microsatellite calling
 - **HipSTR**: Contains scripts to analyze HipSTR output of msCounts/allelotype.
 ## Methylation Analysis
+- **methylCov.py**: This script will calculate basic CpG coverage statistics from mapped RRBS reads
