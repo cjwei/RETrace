@@ -11,7 +11,7 @@ To run this script, we must include the following input:
         samtools mpileup -f <genome.fa> <read1_val_1.sort.bam> > <read1_val_1.pileup>
     2) ref.fa = reference fasta file containing sequences to which reads were mapped
 The script will then go through and output the following statistics/files:
-    1) covStats.txt = contains basic statistics of read coverage (i.e. num reads mapped, num CpG/CHG/CHH read, avg read coverage)
+    1) covStats.txt = contains basic statistics of read coverage (i.e. num CpG/CHG/CHH read, avg read coverage)
     2) methylLevel.png = contains plots of frequency of different methylation levels in dataset (similar to Supp Fig 2 in Guo 2015 Nat Prot paper)
 '''
 
@@ -39,7 +39,8 @@ def findctype(ref_bases):
 def parsePileup(file_list, refDict):
     methDict = {}
     for f in file_list:
-        file_name = f.name.split('/')[-1].split('.')[0]
+        name_list = f.name.split('/')[-1].split('.')[:-1]
+        file_name = ".".join(name_list)
         methDict[file_name] = {}
         output = open(file_name + '.methCov.txt', 'w')
         output.write("#Chr\tPos\tRef\tChain\tTotal\tMeth\tUnMeth\tMethRate\tRef_context\tType\n")
@@ -108,31 +109,25 @@ def calcCovStats(methDict, file_name, cutoff):
 def calcStats(methDict, prefix):
     '''
     This funciton will calculate the following statistics per file:
-        1) Total number of reads mapped
-        2) Total number of CpG/CHG/CHH positions covered along with the number of reads for each
+        1) Total number of CpG/CHG/CHH positions covered
+        2) Avg number of reads covering each position
     '''
-    stats_output = open(prefix + ".covStats.txt", 'w')
-    stats_output.write("File\tTotal Reads\tTotal CpG/CHG/CHH\tTotal Reads CpG/CHG/CHH\t"
+    stats_output = open(prefix + ".covStats.txt", 'a+')
+    stats_output.write("File\tTotal CpG/CHG/CHH\t"
         + "Unique CpG (1x)\tMean Coverage (1x)\t"
         + "Unique CpG (5x)\tMean Coverage (5x)\t"
         + "Unique CpG (10x)\tMean Coverage (10x)\n")
     for file_name in sorted(methDict.keys()):
         #We first want to calculate the total read/ctype statistics
-        (total_reads, total_CpG, total_CHG, total_CHH, reads_CpG, reads_CHG, reads_CHH) = (0,0,0,0,0,0,0)
+        (total_CpG, total_CHG, total_CHH) = (0,0,0)
         for base_loc in sorted(methDict[file_name].keys()):
-            total_reads += methDict[file_name][base_loc]["Total"]
             if (methDict[file_name][base_loc]["Type"] == "CpG"):
                 total_CpG += 1
-                reads_CpG += methDict[file_name][base_loc]["Total"]
             elif (methDict[file_name][base_loc]["Type"] == "CHG"):
                 total_CHG += 1
-                reads_CHG += methDict[file_name][base_loc]["Total"]
             elif (methDict[file_name][base_loc]["Type"] == "CHH"):
                 total_CHH += 1
-                reads_CHH += methDict[file_name][base_loc]["Total"]
-        stats_output.write(file_name + "\t" + str(total_reads) + "\t"
-            + str(total_CpG) + "/" + str(total_CHG) + "/" + str(total_CHH) + "\t"
-            + str(reads_CpG) + "/" + str(reads_CHG) + "/" + str(reads_CHH) + "\t")
+        stats_output.write(file_name + "\t" + str(total_CpG) + "/" + str(total_CHG) + "/" + str(total_CHH) + "\t")
         for cutoff in [1,5,10]:
             (num_CpG, mean_cov) = calcCovStats(methDict, file_name, cutoff)
             stats_output.write(str(num_CpG) + "\t" + str(mean_cov) + "\t")
