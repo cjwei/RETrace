@@ -18,7 +18,7 @@ samtools mpileup -f reference.fa input.bam >output.pileup
 #### Step 2: Perform methylation calling using the pileup file
 Contained within the `parsePileup` function, we can make methylation calls for each relevant C in CpG context
 
-### Step 3: Calculate the pairwise dissimilarity matrix
+#### Step 3: Calculate the pairwise dissimilarity matrix
 We will calculate the pairwise dissimilarity matrix as described in Hui et al, 2018.  For each pair of single cell bam files, we calculate the following:
 1. Determine shared CpGs between each pair of cells
 2. Filter out only CpGs with 0% or 100% methylation (and above the read cov cutoff [default: 1])
