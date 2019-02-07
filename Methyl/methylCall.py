@@ -5,12 +5,13 @@ import pybedtools
 import itertools
 from Bio import SeqIO
 from Bio.Seq import Seq
+import os
 
 '''
-Usage: python script.py [input.bam|input.pileup] ... --ref ref.fa
+Usage: python script.py [input.bam] ... --ref ref.fa
 This script is based off of SingleC_MetLevel.pl from Guo 2015 Nat Prot paper <https://doi.org/10.1038/nprot.2015.039>
 To run this script, we must include the following input:
-    1) input.bam or input.pileup = list of bam/pileup files containing Bismark mapped reads.  This will be used to either generate the mpileup file (to calculate raw number of CpGs covered) or imported directly
+    1) input.bam = list of bam files containing Bismark mapped reads.  This will be used to generate the mpileup file using the following command:
         samtools mpileup -f <genome.fa> <read1_val_1.sort.bam> > <read1_val_1.pileup>
     2) ref.fa = reference fasta file containing sequences to which reads were mapped
     3) cpgIslandExt.bed = reference bed file containing CGI locations across the desired reference genome
@@ -41,7 +42,13 @@ def findctype(ref_bases):
 
 def parsePileup(methDict, ref_fa, refDict):
     for file_name in sorted(methDict.keys()):
+        methDict[file_name] = {}
         pileup_name = file_name + ".pileup"
+        #Check whether we already have pileup file within directory
+        if not os.path.isfile('./' + pileup_name):
+            bam_name = file_name + ".bam"
+            mpileup_command = "samtools mpileup -f" + args.ref_fa + " " + bam_name + " >" + pileup_name
+            subprocess.call(mpileup_command, shell=True)
         #We will parse the pileup fill to determine the relevant bases (i.e. C/G's within CpG/CHG/CHH pairs) along with read count and methylation levels
         output = open(file_name + '.methCov.txt', 'w')
         output.write("#Chr\tPos\tRef\tChain\tTotal\tMeth\tUnMeth\tMethRate\tRef_context\tType\n")
@@ -168,20 +175,13 @@ def main():
     parser.add_argument('--prefix', action="store", dest="prefix", default="methCov", help="Specifies prefix for output files")
     parser.add_argument('-stats', action="store_true", help="Optional: Output statistics including unique CpG/CGI counts")
     parser.add_argument('--ref_CGI', action="store", dest="ref_CGI", help="Bed file containing reference genome CGI locations")
-    parser.add_argument('file', type=argparse.FileType('r'), nargs='+', help="List of mpileup files")
+    parser.add_argument('file', type=argparse.FileType('r'), nargs='+', help="List of bam files")
     args = parser.parse_args()
 
     methDict = {}
-
-    #Convert all bam files to pileup if necessary
     for f in args.file:
         name_list = f.name.split('/')[-1].split('.')[:-1]
         file_name = ".".join(name_list)
-        if f.name.endswith('bam'):
-            bam_name = file_name + ".bam"
-            pileup_name = file_name + ".pileup"
-            mpileup_command = "samtools mpileup -f" + args.ref_fa + " " + bam_name + " >" + pileup_name
-            subprocess.call(mpileup_command, shell=True)
         methDict[file_name] = {}
 
     #Import reference fasta file
