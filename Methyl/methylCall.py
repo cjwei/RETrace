@@ -6,6 +6,10 @@ import itertools
 from Bio import SeqIO
 from Bio.Seq import Seq
 import os
+import pandas
+import matplotlib
+matplotlib.use('Agg')
+import seaborn as sns
 
 '''
 Usage: python script.py [input.bam] ... --ref ref.fa
@@ -16,7 +20,9 @@ To run this script, we must include the following input:
     2) ref.fa = reference fasta file containing sequences to which reads were mapped
     3) cpgIslandExt.bed = reference bed file containing CGI locations across the desired reference genome
 The script will then go through and output the following statistics/files:
-    1) covStats.txt = contains basic statistics of read coverage (i.e. num CpG/CHG/CHH read, avg read coverage).  It will also include CpG island covereage statistics.
+    1) input.methCov.txt = for each CpG position covered, output the following information:
+        Chr, Pos, Ref, Chain, Total Reads, Meth, UnMeth, MethRate, Ref_context, Type (eg. CpG, CHH, CHG)
+    2) covStats.txt = contains basic statistics of read coverage (i.e. num CpG/CHG/CHH read, avg read coverage).  It will also include CpG island covereage statistics.
 '''
 
 def parseRef(ref_fa):
@@ -47,7 +53,7 @@ def parsePileup(methDict, ref_fa, refDict):
         #Check whether we already have pileup file within directory
         if not os.path.isfile('./' + pileup_name):
             bam_name = file_name + ".bam"
-            mpileup_command = "samtools mpileup -f" + args.ref_fa + " " + bam_name + " >" + pileup_name
+            mpileup_command = "samtools mpileup -f" + ref_fa + " " + bam_name + " >" + pileup_name
             subprocess.call(mpileup_command, shell=True)
         #We will parse the pileup fill to determine the relevant bases (i.e. C/G's within CpG/CHG/CHH pairs) along with read count and methylation levels
         output = open(file_name + '.methCov.txt', 'w')
@@ -167,28 +173,56 @@ def calcStats(methDict, prefix):
             (num_CpG, mean_cov) = calcCovStats(methDict, file_name, cutoff)
             stats_output.write(str(num_CpG) + "\t" + str(mean_cov) + "\t")
         stats_output.write(str(num_CGI) + "\t" + str(mean_CGI_cov) + "\n")
-    stats_output.close()
+    stats_output.close(prefix + ".png")
+    return
+
+def calcPD(methDict,seqDepth,prefix):
+    PDdict = {} #We want to save all paiwise_dis as dictionary where we have ordered lists for each file analyzed (ordered alphabetically by filename)
+    for file1 in sorted(methDict.keys()):
+        PDdict[file1] = []
+        for file2 in sorted(methDict.keys()):
+            dis_sum = 0
+            num_shared = 0
+            for shared_base in methDict[file1].keys() & methDict[file2].keys():
+                if methDict[file1][shared_base]["Type"] == "CpG" and methDict[file2][shared_base]["Type"] == "CpG":
+                    if methDict[file1][shared_base]["Total"] >= seqDepth and methDict[file2][shared_base]["Total"] >= seqDepth:
+                        methRate1 = float(methDict[file1][shared_base]["Meth"]/methDict[file1][shared_base]["Total"])
+                        methRate2 = float(methDict[file2][shared_base]["Meth"]/methDict[file2][shared_base]["Total"])
+                        if methRate1.is_integer() and methRate2.is_integer():
+                            num_shared += 1
+                            if methRate1 == methRate2:
+                                dis_sum += 0
+                            else:
+                                dis_sum += 100
+            pairwise_dis = float(dis_sum/num_shared)
+            print(file1 + "\t" + file2 + "\t" + str(pairwise_dis) + "\t" + str(num_shared))
+            PDdict[file1].append(pairwise_dis)
+    PDdf = pandas.DataFrame(PDdict, index=sorted(methDict.keys()))
+    PD_clustermap = sns.clustermap(PDdf)
+    PD_clustermap.savefig(prefix + ".png")
 
 def main():
     parser = argparse.ArgumentParser(description="Calculate methylation coverage")
+    parser.add_argument('file', type=argparse.FileType('r'), nargs='+', help="List of bam files")
     parser.add_argument('--ref', action="store", dest="ref_fa", help="Genome reference fasta location")
     parser.add_argument('--prefix', action="store", dest="prefix", default="methCov", help="Specifies prefix for output files")
     parser.add_argument('-stats', action="store_true", help="Optional: Output statistics including unique CpG/CGI counts")
     parser.add_argument('--ref_CGI', action="store", dest="ref_CGI", help="Bed file containing reference genome CGI locations")
-    parser.add_argument('file', type=argparse.FileType('r'), nargs='+', help="List of bam files")
+    parser.add_argument('--seqDepth', action="store", dest="seqDepth", default=1, help="Minimum number reads covering CpG for calculating pd")
     args = parser.parse_args()
 
+    #Import reference fasta file
+    refDict = parseRef(args.ref_fa)
+
+    #Import methylation calls
     methDict = {}
     for f in args.file:
         name_list = f.name.split('/')[-1].split('.')[:-1]
         file_name = ".".join(name_list)
         methDict[file_name] = {}
 
-    #Import reference fasta file
-    refDict = parseRef(args.ref_fa)
-
-    #Import methylation calls
     methDict = parsePileup(methDict, args.ref_fa, refDict)
+    refDict.clear() #Remove refDict in order to clear up memory
 
     #Caculate methylation coverage statistics
     if args.stats is True:
@@ -198,7 +232,11 @@ def main():
             parser.error('Cannot calculate statistics without specifying ref_CGI file')
 
     #Calculate raw statistics for all files
-    calcStats(methDict, args.prefix)
+    if args.stats is True:
+        calcStats(methDict, args.prefix)
+
+    #Calculate pairwise dissimilarity matrix
+    calcPD(methDict, int(args.seqDepth), args.prefix)
 
 #%%
 if __name__ == "__main__":
