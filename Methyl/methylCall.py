@@ -166,7 +166,7 @@ def main():
     parser = argparse.ArgumentParser(description="Calculate methylation coverage")
     parser.add_argument('--ref', action="store", dest="ref_fa", help="Genome reference fasta location")
     parser.add_argument('--prefix', action="store", dest="prefix", default="methCov", help="Specifies prefix for output files")
-    parser.add_argument('-stats', action="store_true", help="Output statistics including unique CpG/CGI counts")
+    parser.add_argument('-stats', action="store_true", help="Optional: Output statistics including unique CpG/CGI counts")
     parser.add_argument('--ref_CGI', action="store", dest="ref_CGI", help="Bed file containing reference genome CGI locations")
     parser.add_argument('file', type=argparse.FileType('r'), nargs='+', help="List of mpileup files")
     args = parser.parse_args()
@@ -203,4 +203,3 @@ def main():
 #%%
 if __name__ == "__main__":
     main()
-
