@@ -99,7 +99,7 @@ def parsePileup(methDict, ref_fa, refDict):
                 ref_bases = str(Seq(ref_bases).reverse_complement())
                 ctype = findctype(ref_bases)
             meth_rate = meth / total_bases
-            if (ctype):
+            if (ctype == "CpG"): #Only save CpG (ignore CHH and CHG)
                 output.write(chr + "\t" + pos + "\t" + ref + "\t" + chain + "\t" + str(total_bases) + "\t" + str(meth) + "\t" + str(unmeth) + "\t" + str(meth_rate) + "\t" + ref_bases + "\t" + ctype + "\n")
                 #We also want to save all of these stats to methDict"
                 base_loc = chr + ":" + pos + ";" + ref + ";" + chain
@@ -123,9 +123,9 @@ def CGIstats(methDict, ref_CGI):
             CGI_loc = CGI.fields[0] + ":" + CGI.fields[1] + "-" + CGI.fields[2]
             read_name = CGI.fields[7]
             if CGI_loc not in methDict[file_name]["CGI"].keys():
-                methDict[file_name]["CGI"][CGI_loc] = [read_name]
+                methDict[file_name]["CGI"][CGI_loc] = 1 #Count number of reads per CGI location
             else:
-                methDict[file_name]["CGI"][CGI_loc].append(read_name)
+                methDict[file_name]["CGI"][CGI_loc] += 1
     return methDict
 
 def calcCovStats(methDict, file_name, cutoff):
@@ -146,29 +146,20 @@ def calcStats(methDict, prefix):
         2) Avg number of reads covering each position
     '''
     stats_output = open(prefix + ".covStats.txt", 'a+')
-    stats_output.write("File\tTotal CpG/CHG/CHH\t"
+    stats_output.write("File\t"
         + "Unique CpG (1x)\tMean Coverage (1x)\t"
         + "Unique CpG (5x)\tMean Coverage (5x)\t"
         + "Unique CpG (10x)\tMean Coverage (10x)\t"
         + "Number CGI\tMean Coverage\n")
     for file_name in sorted(methDict.keys()):
-        #We first want to calculate the total read/ctype statistics
-        (total_CpG, total_CHG, total_CHH) = (0,0,0)
+        stats_output.write(file_name + "\t")
         #Summarize CGI stats
         num_CGI = len(methDict[file_name]["CGI"].keys())
         if (num_CGI > 0):
-            mean_CGI_cov = round(len(list(itertools.chain.from_iterable(methDict[file_name]["CGI"].values())))/num_CGI)
+            mean_CGI_cov = round(sum(methDict[file_name]["CGI"].values())/num_CGI)
         else:
             mean_CGI_cov = "NA"
-        #Determine C coverage
-        for base_loc in sorted(methDict[file_name]["base"].keys()):
-            if (methDict[file_name]["base"][base_loc]["Type"] == "CpG"):
-                total_CpG += 1
-            elif (methDict[file_name]["base"][base_loc]["Type"] == "CHG"):
-                total_CHG += 1
-            elif (methDict[file_name]["base"][base_loc]["Type"] == "CHH"):
-                total_CHH += 1
-        stats_output.write(file_name + "\t" + str(total_CpG) + "/" + str(total_CHG) + "/" + str(total_CHH) + "\t")
+        #Determine CpG coverage
         for cutoff in [1,5,10]:
             (num_CpG, mean_cov) = calcCovStats(methDict, file_name, cutoff)
             stats_output.write(str(num_CpG) + "\t" + str(mean_cov) + "\t")
@@ -203,8 +194,15 @@ def calcPD(sampleDict, typeDict, seqDepth, prefix):
 
     #Print clustermap using the calculated pairwise disimilarity
     PDdf = pandas.DataFrame(PDdict, index=sorted(typeDict.keys()))
+
+    sns.set(font_scale=2)
     PD_clustermap = sns.clustermap(PDdf)
     PD_clustermap.savefig(prefix + ".png")
+
+    PD_clustermap_z = sns.clustermap(PDdf, z_score=1) #Draw clustermap based on z-scores of each column (i.e. sample input) with lower z-score indicating higher similarity (lower PD)
+    PD_clustermap_z.savefig(prefix + ".z_norm.png")
+
+    return
 
 def main():
     parser = argparse.ArgumentParser(description="Calculate methylation coverage")
