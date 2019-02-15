@@ -90,9 +90,9 @@ def main():
     parser.add_argument('file', type=argparse.FileType('r'), nargs='+')
     parser.add_argument('--dist', action="store", dest="dist_metric", help="Specify distance metric for pairwise comparisons", default="Abs")
     parser.add_argument('--output', action="store", dest="output", help="Specify output file containing pairwise distance calculations")
-    parser.add_argument('--min-call-qual', action="store", dest="min_qual", default=0.0, help="Specify the minimum posterior probability of genotype for filtering")
-    parser.add_argument('--min-reads', action="store", dest="min_reads", default=5, help="Cutoff for minimum number of reads required for calling allelotype")
-    parser.add_argument('--max-stutter', action="store", dest="max_stutter", default=0.5, help="Define maximum number of reads that can be classified as stutter")
+    parser.add_argument('--min-call-qual', action="store", dest="min_qual", default=0, help="Specify the minimum posterior probability of genotype for filtering")
+    parser.add_argument('--min-reads', action="store", dest="min_reads", default=1, help="Cutoff for minimum number of reads required for calling allelotype")
+    parser.add_argument('--max-stutter', action="store", dest="max_stutter", default=1, help="Define maximum number of reads that can be classified as stutter")
     parser.add_argument('-v', action="store_true", help="Flag for determining whether we want to output all statistics for shared targets in output")
     args = parser.parse_args()
 
