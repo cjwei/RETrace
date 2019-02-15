@@ -17,7 +17,7 @@ The distance metrics used can be either: (Chapal-Ilani et al, 2013; Biezuner et 
         D(i,j) = 1/L sum(Ai,l/sum(abs(Ai,l)) - Aj,l/sum(abs(Aj,l))) for all l in L
 '''
 
-def parseVCF(file_list):
+def parseVCF(file_list,min_qual,min_reads,max_stutter):
     alleleDict = {}
     for f in file_list:
         for line in f:
@@ -36,11 +36,12 @@ def parseVCF(file_list):
                             prob_genotype = val.split(':')[2] #Q (posteriior probability of unphased genotype)
                             num_reads = val.split(':')[4] #DP (number of reads used for sample's genotype)
                             num_stutter = val.split(':')[6] #DSTUTTER (number of reads with a stutter indel in the STR region)
-                            if sample_id not in alleleDict.keys():
-                                alleleDict[sample_id] = {}
-                            alleleDict[sample_id][target_id] = {}
-                            alleleDict[sample_id][target_id]["allelotype"] = [int(i) for i in allelotype.split('|')]
-                            alleleDict[sample_id][target_id]["stats"] = [float(prob_genotype),int(num_reads),int(num_stutter)] #This will contain important stats for HipSTR genotype call
+                            if float(prob_genotype) >= min_qual and int(num_reads) >= min_reads and float(int(num_stutter)/int(num_reads)) <= max_stutter:
+                                if sample_id not in alleleDict.keys():
+                                    alleleDict[sample_id] = {}
+                                alleleDict[sample_id][target_id] = {}
+                                alleleDict[sample_id][target_id]["allelotype"] = [int(i) for i in allelotype.split('|')]
+                                alleleDict[sample_id][target_id]["stats"] = [float(prob_genotype),int(num_reads),int(num_stutter)] #This will contain important stats for HipSTR genotype call
     return alleleDict
 
 def calcDist(alleleDict,dist_metric,output_file,verbose):
@@ -70,15 +71,16 @@ def calcDist(alleleDict,dist_metric,output_file,verbose):
             distMatrix.append(sample1_dist)
             targetMatrix.append(sample1_targets)
     for dist_indx,dist_list in enumerate(distMatrix): #Print matrix containing distances
-        output.write(sorted(alleleDict.keys())[dist_indx] + "\t" + ",".join(str(round(i,3)) for i in dist_list) + "\n")
+        output.write(sorted(alleleDict.keys())[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
     for target_indx,target_list in enumerate(targetMatrix): #Print matrix containing number targets shared between each pair
-        output.write(sorted(alleleDict.keys())[target_indx] + "\t" + ",".join(str(j) for j in target_list) + "\n")
+        output.write(sorted(alleleDict.keys())[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
     distObj = DistanceMatrix(distMatrix,sorted(alleleDict.keys()))
     NJTree = nj(distObj)
+    NJTree.root_at_midpoint()
     NJNewick = nj(distObj, result_constructor=str)
 
     output.write(NJTree.ascii_art() + "\n")
-    output.write(NJNewick)
+    output.write(NJNewick + "\n")
     output.close()
 
     return
@@ -88,11 +90,14 @@ def main():
     parser.add_argument('file', type=argparse.FileType('r'), nargs='+')
     parser.add_argument('--dist', action="store", dest="dist_metric", help="Specify distance metric for pairwise comparisons", default="Abs")
     parser.add_argument('--output', action="store", dest="output", help="Specify output file containing pairwise distance calculations")
+    parser.add_argument('--min-call-qual', action="store", dest="min_qual", default=0.0, help="Specify the minimum posterior probability of genotype for filtering")
+    parser.add_argument('--min-reads', action="store", dest="min_reads", default=5, help="Cutoff for minimum number of reads required for calling allelotype")
+    parser.add_argument('--max-stutter', action="store", dest="max_stutter", default=0.5, help="Define maximum number of reads that can be classified as stutter")
     parser.add_argument('-v', action="store_true", help="Flag for determining whether we want to output all statistics for shared targets in output")
     args = parser.parse_args()
 
     #Import allelotype for all samples found within vcf files
-    alleleDict = parseVCF(args.file)
+    alleleDict = parseVCF(args.file, float(args.min_qual), int(args.min_reads), float(args.max_stutter))
 
     #Calculate distance
     calcDist(alleleDict, args.dist_metric, args.output, args.v)
