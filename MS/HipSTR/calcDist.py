@@ -2,6 +2,8 @@
 import argparse
 from skbio import DistanceMatrix
 from skbio.tree import nj
+import random
+import numpy as np
 
 '''
 Usage: python script.py input1.vcf input2.vcf... --dist [Abs/NormAbs] --output distMatrix.txt
@@ -44,37 +46,85 @@ def parseVCF(file_list,min_qual,min_reads,max_stutter):
                                 alleleDict[sample_id][target_id]["stats"] = [float(prob_genotype),int(num_reads),int(num_stutter)] #This will contain important stats for HipSTR genotype call
     return alleleDict
 
-def calcDist(alleleDict,dist_metric,output_file,verbose):
+def randDownsample(target_list,n): #Perform reservoir downsampling from list of targets
+    downsample_list = []
+    for index, target in enumerate(target_list):
+        if index < n:
+            downsample_list.append(target)
+        elif index >= n and random.random() < n/float(index+1):
+            replace = random.randint(0, len(downsample_list)-1)
+            downsample_list[replace] = target
+    return downsample_list
+
+def calcDist(alleleDict,dist_metric,max_targets,output_file,verbose):
     output = open(output_file, 'w')
+    distDict = {} #This will allow us to create a dictionary containing distances as values and analyzed pairwise samples as keys (allows us the chance to create a symmetric matrix without recalculating redundant distances)
     distMatrix = []
     targetMatrix = []
+    stdMatrix = []
     if dist_metric == "Abs":
         for sample1 in sorted(alleleDict.keys()):
             sample1_dist = [] #Contains all pairwise distances for genotypes in sample1
             sample1_targets = [] #Contains number of pairwise shared targets in sample1
             for sample2 in sorted(alleleDict.keys()):
-                output.write("----------" + "\t" + sample1 + "\t" + sample2 + "----------\n")
-                sum_diff = 0
-                target_list = set(alleleDict[sample1].keys()).intersection(set(alleleDict[sample2].keys()))
-                for target_id in sorted(target_list):
-                    genotype_diff = abs(alleleDict[sample1][target_id]["allelotype"][0] - alleleDict[sample2][target_id]["allelotype"][0]) + abs(alleleDict[sample1][target_id]["allelotype"][1] - alleleDict[sample2][target_id]["allelotype"][1])
-                    sum_diff += genotype_diff
-                    #We want to print each target info for comparisons
-                    if verbose is True:
-                        output.write(target_id + "\t" +
-                            sample1 + "\t" + ','.join(str(i) for i in alleleDict[sample1][target_id]["allelotype"]) + "\t(" + ','.join(str(j) for j in alleleDict[sample1][target_id]["stats"]) + ")\t" +
-                            sample2 + "\t" + ','.join(str(k) for k in alleleDict[sample2][target_id]["allelotype"]) + "\t(" + ','.join(str(l) for l in alleleDict[sample2][target_id]["stats"]) + ")\n")
-                abs_diff = float(sum_diff/len(target_list))
-                sample1_dist.append(abs_diff)
-                sample1_targets.append(len(target_list))
-                output.write("Absolute Diff:\t" + str(round(abs_diff,3)) + "\tNum Targets Shared:\t" + str(len(target_list)) + "\n")
-            distMatrix.append(sample1_dist)
-            targetMatrix.append(sample1_targets)
+                distDict_key = tuple(sorted([sample1,sample2]))
+                if distDict_key in distDict.keys():
+                    continue
+                else:
+                    distDict[distDict_key] = {}
+#                output.write("----------\t" + ",".join(distDict_key) + "\t----------\n")
+                target_list = list(set(alleleDict[sample1].keys()).intersection(set(alleleDict[sample2].keys())))
+                abs_diff_list = []
+                if max_targets < float('inf'):
+                    for i in range(1000):
+                        sum_diff = 0
+                        target_list = randDownsample(target_list,max_targets)
+                        for target_id in sorted(target_list):
+                            genotype_diff = abs(alleleDict[sample1][target_id]["allelotype"][0] - alleleDict[sample2][target_id]["allelotype"][0]) + abs(alleleDict[sample1][target_id]["allelotype"][1] - alleleDict[sample2][target_id]["allelotype"][1])
+                            sum_diff += genotype_diff
+                            #We want to print each target info for comparisons
+#                            if verbose is True:
+#                                output.write(target_id + "\t" +
+#                                    sample1 + "\t" + ','.join(str(i) for i in alleleDict[sample1][target_id]["allelotype"]) + "\t(" + ','.join(str(j) for j in alleleDict[sample1][target_id]["stats"]) + ")\t" +
+#                                    sample2 + "\t" + ','.join(str(k) for k in alleleDict[sample2][target_id]["allelotype"]) + "\t(" + ','.join(str(l) for l in alleleDict[sample2][target_id]["stats"]) + ")\n")
+                        abs_diff_list.append(float(sum_diff/len(target_list)))
+                else:
+                    sum_diff = 0
+                    for target_id in sorted(target_list):
+                        genotype_diff = abs(alleleDict[sample1][target_id]["allelotype"][0] - alleleDict[sample2][target_id]["allelotype"][0]) + abs(alleleDict[sample1][target_id]["allelotype"][1] - alleleDict[sample2][target_id]["allelotype"][1])
+                        sum_diff += genotype_diff
+                    abs_diff_list.append(float(sum_diff/len(target_list)))
+#                abs_diff = sum(abs_diff_list)/len(abs_diff_list)
+                abs_diff = np.mean(np.array(abs_diff_list))
+                diff_std = np.std(np.array(abs_diff_list))
+                distDict[distDict_key]["abs_diff"] = abs_diff
+                distDict[distDict_key]["diff_std"] = diff_std
+                distDict[distDict_key]["num_target"] = len(target_list)
+#                output.write("Absolute Diff:\t" + str(round(abs_diff,3)) + "\tNum Targets Shared:\t" + str(len(target_list)) + "\n")
+    #Create distMatrix from distDict
+    for sample1 in sorted(alleleDict.keys()):
+        sample1_dist = []
+        sample1_targets = []
+        sample1_std = []
+        for sample2 in sorted(alleleDict.keys()):
+            distDict_key = tuple(sorted([sample1,sample2]))
+            sample1_dist.append(distDict[distDict_key]["abs_diff"])
+            sample1_targets.append(distDict[distDict_key]["num_target"])
+            sample1_std.append(distDict[distDict_key]["diff_std"])
+        distMatrix.append(sample1_dist)
+        targetMatrix.append(sample1_targets)
+        stdMatrix.append(sample1_std)
+    #Draw neighbor joining tree
+    distObj = DistanceMatrix(distMatrix,sorted(alleleDict.keys()))
+    output.write("----------Distance Matrix----------\n")
     for dist_indx,dist_list in enumerate(distMatrix): #Print matrix containing distances
         output.write(sorted(alleleDict.keys())[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
+    output.write("----------Num Targets Matrix----------\n")
     for target_indx,target_list in enumerate(targetMatrix): #Print matrix containing number targets shared between each pair
         output.write(sorted(alleleDict.keys())[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
-    distObj = DistanceMatrix(distMatrix,sorted(alleleDict.keys()))
+    output.write("----------Std Dev Matrix----------\n")
+    for std_index,std_list in enumerate(stdMatrix): #Print matrix containing standard dev for distances calculated
+        output.write(sorted(alleleDict.keys())[std_index] + "," + ",".join(str(k) for k in std_list) + "\n")
     NJTree = nj(distObj)
 #    NJTree.root_at_midpoint()
     NJNewick = nj(distObj, result_constructor=str)
@@ -93,6 +143,7 @@ def main():
     parser.add_argument('--min-call-qual', action="store", dest="min_qual", default=0, help="Specify the minimum posterior probability of genotype for filtering")
     parser.add_argument('--min-reads', action="store", dest="min_reads", default=1, help="Cutoff for minimum number of reads required for calling allelotype")
     parser.add_argument('--max-stutter', action="store", dest="max_stutter", default=1, help="Define maximum number of reads that can be classified as stutter")
+    parser.add_argument('--num-targets', action="store", dest="max_targets", default='inf', help="Maximum number of pairwise shared targets used to calculate distance")
     parser.add_argument('-v', action="store_true", help="Flag for determining whether we want to output all statistics for shared targets in output")
     args = parser.parse_args()
 
@@ -100,7 +151,7 @@ def main():
     alleleDict = parseVCF(args.file, float(args.min_qual), int(args.min_reads), float(args.max_stutter))
 
     #Calculate distance
-    calcDist(alleleDict, args.dist_metric, args.output, args.v)
+    calcDist(alleleDict, args.dist_metric, float(args.max_targets), args.output, args.v)
 
 if __name__ == "__main__":
     main()
