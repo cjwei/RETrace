@@ -76,7 +76,7 @@ def calcDist(alleleDict,dist_metric,output_file,verbose):
         output.write(sorted(alleleDict.keys())[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
     distObj = DistanceMatrix(distMatrix,sorted(alleleDict.keys()))
     NJTree = nj(distObj)
-    NJTree.root_at_midpoint()
+#    NJTree.root_at_midpoint()
     NJNewick = nj(distObj, result_constructor=str)
 
     output.write(NJTree.ascii_art() + "\n")
