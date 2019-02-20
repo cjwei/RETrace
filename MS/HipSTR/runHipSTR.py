@@ -15,7 +15,7 @@ The HipSTR vcf file have the followign format for each microsatellite target cap
     #CHROM  POS_ID  REF ALT QUAL    FILTER  INFO    FORMAT  Sample1 Sample2 ...
 '''
 
-def run_HipSTR(sampleDict, vcf_output):
+def run_HipSTR(sampleDict, vcf_output, prefix):
     '''Wrapper command to add readGroup to bam files and run HipSTR'''
     readGroup_list = []
     for sample in sorted(sampleDict.keys()):
@@ -32,7 +32,7 @@ def run_HipSTR(sampleDict, vcf_output):
     hipSTR_command = "/home/cjwei/software/HipSTR/HipSTR --bams " + ",".join(sorted(readGroup_list)) + " " + \
         "--fasta /media/6TB_slot4/GenomeDB/hg19/raw_fasta/hg19_reference.fa " + \
         "--regions /home/cjwei/software/RETrace/MS/HipSTR/20171211_probes.bed " + \
-        "--str-vcf " + vcf_output + ".gz --log HipSTR.log --min-reads 15 --use-unpaired --no-rmdup"
+        "--str-vcf " + vcf_output + ".gz --log " + prefix + ".log --min-reads 15 --use-unpaired --no-rmdup"
     print(hipSTR_command)
     gunzip_command = "gunzip " + vcf_output
     subprocess.call(hipSTR_command, shell=True)
@@ -69,10 +69,14 @@ def parseVCF(sampleDict, vcf_output, min_qual, min_reads, max_stutter):
                                 sampleDict[sample]["HipSTR"][target_id]["stats"] = [float(prob_genotype),int(num_reads),int(num_stutter)] #This will contain important stats for HipSTR genotype call
     return sampleDict
 
-def calcDist(sampleDict, dist_metric, verbose):
+def calcDist(sampleDict, target_file, dist_metric, verbose, prefix):
     distDict = {}
     distDict["sampleComp"] = {}
     distDict["targetComp"] = {}
+    #We want to create a list of all targets to be used for distance calculation (specified by user)
+    if target_file != "All":
+        with open(target_file) as f:
+            specified_targets = f.read().splitlines()
     if dist_metric == "Abs":
         for sample1 in sorted(sampleDict.keys()):
             distDict["sampleComp"][sample1] = {}
@@ -80,7 +84,14 @@ def calcDist(sampleDict, dist_metric, verbose):
                 distDict["sampleComp"][sample1][sample2] = {}
                 sum_diff = 0
                 target_list = set(sampleDict[sample1]["HipSTR"].keys()).intersection(set(sampleDict[sample2]["HipSTR"].keys()))
+                num_targets = 0
                 for target_id in sorted(target_list):
+                    try:
+                        if target_id not in specified_targets:
+                            continue
+                    except:
+                        pass
+                    num_targets += 1
                     genotype_diff = abs(sampleDict[sample1]["HipSTR"][target_id]["allelotype"][0] - sampleDict[sample2]["HipSTR"][target_id]["allelotype"][0]) + abs(sampleDict[sample1]["HipSTR"][target_id]["allelotype"][1] - sampleDict[sample2]["HipSTR"][target_id]["allelotype"][1])
                     sum_diff += genotype_diff
                     if target_id not in distDict["targetComp"].keys():
@@ -88,9 +99,9 @@ def calcDist(sampleDict, dist_metric, verbose):
                     distDict["targetComp"][target_id][tuple(sorted([sample1,sample2]))] = genotype_diff
                 abs_diff = float(sum_diff/len(target_list))
                 distDict["sampleComp"][sample1][sample2]["dist"] = abs_diff
-                distDict["sampleComp"][sample1][sample2]["num_targets"] = len(target_list)
+                distDict["sampleComp"][sample1][sample2]["num_targets"] = num_targets
     if verbose is True: #We want to determine useful targets
-        targetOutput = open("output.targetInfo.txt", 'w')
+        targetOutput = open(prefix + ".stats.out", 'w')
         targetOutput.write("targetID\tIntra-clone Dist\tNum Intra-clone Pairs\tInter-clone Dist\tNum Inter-clone Pairs\tDist Bool\t" + "\t".join(sorted(sampleDict.keys())) + "\n")
         for target_id in sorted(distDict["targetComp"].keys()):
             #Calculate average intra (within) and inter (across) clone distances
@@ -104,16 +115,17 @@ def calcDist(sampleDict, dist_metric, verbose):
                 elif sampleDict[sample1]["clone"] != sampleDict[sample2]["clone"] and sampleDict[sample1]["clone"] != sampleDict[sample2]["clone"]:
                     inter_dist += distDict["targetComp"][target_id][(sample1,sample2)]
                     num_inter += 1
-            if num_intra > 0:
+            if num_intra > 0 and num_inter > 0:
                 avg_intra_dist = float(intra_dist/num_intra) #Average allelotype difference within group
-            if num_inter > 0:
                 avg_inter_dist = float(inter_dist/num_inter) #Average allelotype difference across groups
-            if avg_intra_dist > avg_inter_dist:
-                diff_bool = "intra"
-            elif avg_intra_dist < avg_inter_dist:
-                diff_bool = "inter" #We want inter_dist (across groups) to be larger than intra_dist
+                if avg_intra_dist > avg_inter_dist:
+                    diff_bool = "intra"
+                elif avg_intra_dist < avg_inter_dist:
+                    diff_bool = "inter" #We want inter_dist (across groups) to be larger than intra_dist
+                elif avg_intra_dist == avg_inter_dist:
+                    diff_bool = "eq"
             else:
-                diff_bool = "eq"
+                diff_bool = "NA"
             #We want to save the allotypes for all samples
             allelotype_list = []
             for sample in sorted(sampleDict.keys()):
@@ -126,8 +138,8 @@ def calcDist(sampleDict, dist_metric, verbose):
         targetOutput.close()
     return distDict
 
-def drawTree(distDict, sampleDict, output):
-    tree_output = open(output, 'w')
+def drawTree(distDict, sampleDict, prefix):
+    tree_output = open(prefix + ".tree.out", 'w')
     distMatrix = []
     targetMatrix = []
     for sample1 in sorted(sampleDict.keys()):
@@ -153,7 +165,8 @@ def drawTree(distDict, sampleDict, output):
 def main():
     parser = argparse.ArgumentParser(description="Run and analyze HipSTR output to determine distance between single cells")
     parser.add_argument('--input', action="store", dest="sample_info", help="Tab-delimited file containing sample information")
-    parser.add_argument('--output', action="store", dest="output", help="Specify output file containing pairwise distance calculations")
+    parser.add_argument('--prefix', action="store", dest="prefix", help="Specify output file containing pairwise distance calculations")
+    parser.add_argument('--targets', action="store", dest="target_file", default="All", help="[Optional] Specify list of targets used for distance calculation")
     parser.add_argument('--dist', action="store", dest="dist_metric", help="Specify distance metric for pairwise comparisons", default="Abs")
     parser.add_argument('--vcf', action="store", dest="vcf_output")
     parser.add_argument('--min-call-qual', action="store", dest="min_qual", default=0, help="Specify the minimum posterior probability of genotype for filtering")
@@ -181,16 +194,16 @@ def main():
 
     #Run HipSTR if you haven't done so already
     if not os.path.isfile('./' + args.vcf_output):
-        run_HipSTR(sampleDict, args.vcf_output)
+        run_HipSTR(sampleDict, args.vcf_output, args.prefix)
 
     #Parse vcf file to import HipSTR allelotypes
     sampleDict = parseVCF(sampleDict, args.vcf_output, float(args.min_qual), int(args.min_reads), float(args.max_stutter))
 
     #Calculate pairwise distance
-    distDict = calcDist(sampleDict, args.dist_metric, args.v)
+    distDict = calcDist(sampleDict, args.target_file, args.dist_metric, args.v, args.prefix)
 
     #Draw neighbor joining tree
-    drawTree(distDict, sampleDict, args.output)
+    drawTree(distDict, sampleDict, args.prefix)
 
 if __name__ == "__main__":
     main()
