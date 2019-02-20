@@ -10,6 +10,7 @@ import pandas
 import matplotlib
 matplotlib.use('Agg')
 import seaborn as sns
+import random
 
 '''
 Usage: python script.py --sample_bams ... --cell_bams ... --ref_fa ... --prefix ...
@@ -167,41 +168,73 @@ def calcStats(methDict, prefix):
     stats_output.close()
     return
 
+def calcPvalue(sample_methList, type_methList, pairwise_dis):
+    '''We want to calculate the P-value by random shuffling of sample_methList and calculating PD in order to determine null distribution'''
+    num_less = 0
+    for n in range(1000):
+        random.shuffle(sample_methList)
+        dis_sum = 0
+        num_shared = 0
+        for indx, sample_methRate in enumerate(sample_methList):
+            num_shared += 1
+            if type_methList[indx] == sample_methRate:
+                dis_sum += 0
+            else:
+                dis_sum += 100
+        if float(dis_sum/num_shared) < pairwise_dis:
+            num_less += 1
+        print(str(round(pairwise_dis,2)) + "\t" + str(round(float(dis_sum/num_shared),2)))
+    return float(num_less/1000)
+
 def calcPD(sampleDict, typeDict, seqDepth, prefix):
-    PDdict = {} #We want to save all paiwise_dis as dictionary where we have ordered lists for each file analyzed (ordered alphabetically by filename)
+    PDdict = {} #We want to save all paiwise_dis and p-values as dictionary where we have ordered lists for each file analyzed (ordered alphabetically by filename)
+    PDdict["PD"] = {}
+    PDdict["p_value"] = {}
     PD_output = open(prefix + ".PD.txt", 'w')
     PD_output.write("Sample\tCell Type\tPairwise Dissimilarity\tNum Shared\n")
     for sample_name in sorted(sampleDict.keys()):
-        PDdict[sample_name] = []
+        PDdict["PD"][sample_name] = []
+        PDdict["p_value"][sample_name] = []
         for type_name in sorted(typeDict.keys()):
+            sample_methList = []
+            type_methList = []
             dis_sum = 0
             num_shared = 0
             for shared_base in sampleDict[sample_name]["base"].keys() & typeDict[type_name]["base"].keys():
                 if sampleDict[sample_name]["base"][shared_base]["Type"] == "CpG" and typeDict[type_name]["base"][shared_base]["Type"] == "CpG":
                     if sampleDict[sample_name]["base"][shared_base]["Total"] >= seqDepth and typeDict[type_name]["base"][shared_base]["Total"] >= seqDepth:
-                        methRate1 = float(sampleDict[sample_name]["base"][shared_base]["Meth"]/sampleDict[sample_name]["base"][shared_base]["Total"])
-                        methRate2 = float(typeDict[type_name]["base"][shared_base]["Meth"]/typeDict[type_name]["base"][shared_base]["Total"])
-                        if methRate1.is_integer() and methRate2.is_integer():
+                        sample_methRate = float(sampleDict[sample_name]["base"][shared_base]["Meth"]/sampleDict[sample_name]["base"][shared_base]["Total"])
+                        type_methRate = float(typeDict[type_name]["base"][shared_base]["Meth"]/typeDict[type_name]["base"][shared_base]["Total"])
+                        if sample_methRate.is_integer() and type_methRate.is_integer():
+                            sample_methList.append(sample_methRate)
+                            type_methList.append(type_methRate)
                             num_shared += 1
-                            if methRate1 == methRate2:
+                            if sample_methRate == type_methRate:
                                 dis_sum += 0
                             else:
                                 dis_sum += 100
             pairwise_dis = float(dis_sum/num_shared)
-            PD_output.write(sample_name + "\t" + type_name + "\t" + str(round(pairwise_dis,4)) + "\t" + str(num_shared) + "\n")
-            PDdict[sample_name].append(pairwise_dis)
+            print("-----" + sample_name + "\t" + type_name + "-----")
+            p_value = calcPvalue(sample_methList, type_methList, pairwise_dis)
+            print(str(p_value))
+            PD_output.write(sample_name + "\t" + type_name + "\t" + str(round(pairwise_dis,4)) + "\t" + str(num_shared) + "\t" + str(p_value) + "\n")
+            PDdict["PD"][sample_name].append(pairwise_dis)
+            PDdict["p_value"][sample_name].append(p_value)
     PD_output.close()
 
     #Print clustermap using the calculated pairwise disimilarity
-    PDdf = pandas.DataFrame(PDdict, index=sorted(typeDict.keys()))
+    PD_df = pandas.DataFrame(PDdict["PD"], index=sorted(typeDict.keys()))
+    pvalue_df = pandas.DataFrame(PDdict["p_value"], index=sorted(typeDict.keys()))
 
     sns.set(font_scale=2)
-    PD_clustermap = sns.clustermap(PDdf)
-    PD_clustermap.savefig(prefix + ".png")
+    PD_clustermap = sns.clustermap(PD_df)
+    PD_clustermap.savefig(prefix + ".PD.png")
 
-    PD_clustermap_z = sns.clustermap(PDdf, z_score=1) #Draw clustermap based on z-scores of each column (i.e. sample input) with lower z-score indicating higher similarity (lower PD)
-    PD_clustermap_z.savefig(prefix + ".z_norm.png")
+    pvalue_clustermap = sns.clustermap(pvalue_df)
+    pvalue_clustermap.savefig(prefix + ".pvalue.png")
 
+#    PD_clustermap_z = sns.clustermap(PDdf, z_score=1) #Draw clustermap based on z-scores of each column (i.e. sample input) with lower z-score indicating higher similarity (lower PD)
+#    PD_clustermap_z.savefig(prefix + ".z_norm.png")
     return
 
 def main():
