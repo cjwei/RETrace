@@ -10,6 +10,7 @@ import pandas
 import matplotlib
 matplotlib.use('Agg')
 import seaborn as sns
+import numpy as np
 import random
 
 '''
@@ -168,25 +169,23 @@ def calcStats(methDict, prefix):
     stats_output.close()
     return
 
-def calcPvalue(sample_methList, type_methList, pairwise_dis):
-    '''We want to calculate the P-value by random shuffling of sample_methList and calculating PD in order to determine null distribution'''
+def calcPvalue(sample_methRate_list, type_methRate_list, pairwise_dis):
+    '''We want to calculate the P-value by randomly choosing methylation signals based on rates across all cell types and calculating PD in order to determine null distribution'''
     num_less = 0
     for n in range(1000):
-        random.shuffle(sample_methList)
         dis_sum = 0
-        num_shared = 0
-        for indx, sample_methRate in enumerate(sample_methList):
-            num_shared += 1
-            if type_methList[indx] == sample_methRate:
+        random.shuffle(sample_methRate_list)
+        for indx, type_methRate in enumerate(type_methRate_list):
+            if sample_methRate_list[indx] == type_methRate:
                 dis_sum += 0
             else:
                 dis_sum += 100
-        if float(dis_sum/num_shared) < pairwise_dis:
+        if float(dis_sum/len(type_methRate_list)) < pairwise_dis:
             num_less += 1
-        print(str(round(pairwise_dis,2)) + "\t" + str(round(float(dis_sum/num_shared),2)))
+        print(str(round(pairwise_dis,2)) + "\t" + str(round(float(dis_sum/len(type_methRate_list)),2)))
     return float(num_less/1000)
 
-def calcPD(sampleDict, typeDict, seqDepth, prefix):
+def calcPD(sampleDict, typeDict, typeDict_total, seqDepth, prefix):
     PDdict = {} #We want to save all paiwise_dis and p-values as dictionary where we have ordered lists for each file analyzed (ordered alphabetically by filename)
     PDdict["PD"] = {}
     PDdict["p_value"] = {}
@@ -196,26 +195,29 @@ def calcPD(sampleDict, typeDict, seqDepth, prefix):
         PDdict["PD"][sample_name] = []
         PDdict["p_value"][sample_name] = []
         for type_name in sorted(typeDict.keys()):
-            sample_methList = []
-            type_methList = []
+            base_list = []
             dis_sum = 0
             num_shared = 0
+            sample_methRate_list = []
+            type_methRate_list = []
             for shared_base in sampleDict[sample_name]["base"].keys() & typeDict[type_name]["base"].keys():
                 if sampleDict[sample_name]["base"][shared_base]["Type"] == "CpG" and typeDict[type_name]["base"][shared_base]["Type"] == "CpG":
                     if sampleDict[sample_name]["base"][shared_base]["Total"] >= seqDepth and typeDict[type_name]["base"][shared_base]["Total"] >= seqDepth:
                         sample_methRate = float(sampleDict[sample_name]["base"][shared_base]["Meth"]/sampleDict[sample_name]["base"][shared_base]["Total"])
                         type_methRate = float(typeDict[type_name]["base"][shared_base]["Meth"]/typeDict[type_name]["base"][shared_base]["Total"])
                         if sample_methRate.is_integer() and type_methRate.is_integer():
-                            sample_methList.append(sample_methRate)
-                            type_methList.append(type_methRate)
-                            num_shared += 1
-                            if sample_methRate == type_methRate:
-                                dis_sum += 0
-                            else:
-                                dis_sum += 100
+                            type_probMeth = float(typeDict_total[shared_base]["Meth"]/typeDict_total[shared_base]["Total"])
+                            if not type_probMeth.is_integer(): #We want to skip bases that have the same methylation signal across all cell types
+                                sample_methRate_list.append(sample_methRate)
+                                type_methRate_list.append(type_methRate)
+                                num_shared += 1
+                                if sample_methRate == type_methRate:
+                                    dis_sum += 0
+                                else:
+                                    dis_sum += 100
             pairwise_dis = float(dis_sum/num_shared)
             print("-----" + sample_name + "\t" + type_name + "-----")
-            p_value = calcPvalue(sample_methList, type_methList, pairwise_dis)
+            p_value = calcPvalue(sample_methRate_list, type_methRate_list, pairwise_dis)
             print(str(p_value))
             PD_output.write(sample_name + "\t" + type_name + "\t" + str(round(pairwise_dis,4)) + "\t" + str(num_shared) + "\t" + str(p_value) + "\n")
             PDdict["PD"][sample_name].append(pairwise_dis)
@@ -271,19 +273,28 @@ def main():
 
     refDict.clear() #Remove refDict in order to clear up memory
 
+    #Create summary of methylation signal from all cell types per base location
+    typeDict_total = {}
+    for type_name in sorted(typeDict.keys()):
+        for base_loc in sorted(typeDict[type_name]["base"].keys()):
+            if base_loc not in typeDict_total.keys():
+                typeDict_total[base_loc] = {}
+                typeDict_total[base_loc]["Total"] = typeDict[type_name]["base"][base_loc]["Total"]
+                typeDict_total[base_loc]["Meth"] = typeDict[type_name]["base"][base_loc]["Meth"]
+            else:
+                typeDict_total[base_loc]["Total"] += typeDict[type_name]["base"][base_loc]["Total"]
+                typeDict_total[base_loc]["Meth"] += typeDict[type_name]["base"][base_loc]["Meth"]
+
     #Caculate methylation coverage statistics
     if args.stats is True:
         if args.ref_CGI:
             sampleDict = CGIstats(sampleDict, args.ref_CGI)
         else:
             parser.error('Cannot calculate statistics without specifying ref_CGI file')
-
-    #Calculate raw statistics for all files
-    if args.stats is True:
         calcStats(sampleDict, args.prefix)
 
     #Calculate pairwise dissimilarity matrix
-    calcPD(sampleDict, typeDict, int(args.seqDepth), args.prefix)
+    calcPD(sampleDict, typeDict, typeDict_total, int(args.seqDepth), args.prefix)
 
 #%%
 if __name__ == "__main__":
