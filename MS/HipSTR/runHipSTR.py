@@ -62,8 +62,9 @@ def parseVCF(sampleDict, vcf_output, min_qual, min_reads, max_stutter):
                 else:
                     vcf_line = line.split()
                     target_id = vcf_line[2] #This contains targetID (eg. "chr1:14290254-14290298_22xTG")
-                    sample_info = vcf_line[9:]
-                    for indx, val in enumerate(sample_info):
+                    target_info = vcf_line[7]
+                    sample_format = vcf_line[9:]
+                    for indx, val in enumerate(sample_format):
                         sample = sample_names[indx]
                         if val is not '.':
                             allelotype = val.split(':')[1] #GB (base pair differences of genotype from reference)
@@ -76,6 +77,7 @@ def parseVCF(sampleDict, vcf_output, min_qual, min_reads, max_stutter):
                                 sampleDict[sample]["HipSTR"][target_id]["allelotype"] = [int(i) for i in allelotype.split('|')]
                                 sampleDict[sample]["HipSTR"][target_id]["stats"] = [float(prob_genotype),int(num_reads),int(num_stutter)] #This will contain important stats for HipSTR genotype call
                                 sampleDict[sample]["HipSTR"][target_id]["msCounts"] = msCounts.split(';')
+                                sampleDict[sample]["HipSTR"][target_id]["info"] = target_info.split(';')
     return sampleDict
 
 def plotVCF(sampleDict, prefix):
@@ -146,14 +148,13 @@ def calcDist(sampleDict, target_file, dist_metric, verbose, prefix):
                         continue
                 except:
                     pass
+                allelotype1 = sampleDict[sample1]["HipSTR"][target_id]["allelotype"]
+                allelotype2 = sampleDict[sample2]["HipSTR"][target_id]["allelotype"]
+                if set(allelotype1).isdisjoint(set(allelotype2)):
+                    continue
                 num_targets += 1
                 if dist_metric == "Abs":
-                    genotype_diff = abs(sampleDict[sample1]["HipSTR"][target_id]["allelotype"][0] - sampleDict[sample2]["HipSTR"][target_id]["allelotype"][0]) + abs(sampleDict[sample1]["HipSTR"][target_id]["allelotype"][1] - sampleDict[sample2]["HipSTR"][target_id]["allelotype"][1])
-                elif dist_metric == "Eq":
-                    for i, allele in enumerate(sampleDict[sample1]["HipSTR"][target_id]["allelotype"]):
-                        if sampleDict[sample1]["HipSTR"][target_id]["allelotype"][i] == sampleDict[sample1]["HipSTR"][target_id]["allelotype"][i]:
-                            genotype_diff += 1
-                    genotype_diff = len(set(sampleDict[sample1]["HipSTR"][target_id]["allelotype"] + sampleDict[sample2]["HipSTR"][target_id]["allelotype"])) - 2
+                    genotype_diff = abs(allelotype1[0] - allelotype2[0]) + abs(allelotype1[1] - allelotype2[1])
                 sum_diff += genotype_diff
                 if target_id not in distDict["targetComp"].keys():
                     distDict["targetComp"][target_id] = {}
@@ -163,11 +164,13 @@ def calcDist(sampleDict, target_file, dist_metric, verbose, prefix):
             distDict["sampleComp"][sample1][sample2]["num_targets"] = num_targets
     if verbose is True: #We want to determine useful targets
         targetOutput = open(prefix + ".stats.out", 'w')
-        targetOutput.write("targetID\tIntra-clone Dist\tNum Intra-clone Pairs\tInter-clone Dist\tNum Inter-clone Pairs\tDist Bool\tTotal Dist\tNum Total Pairs\t" + "\t".join(sorted(sampleDict.keys())) + "\n")
+        targetOutput.write("targetID\tIntra-clone Dist\tNum Intra-clone Pairs\tInter-clone Dist\tNum Inter-clone Pairs\tDist Bool\tTotal Dist\tNum Total Pairs\t" + \
+            "INFO\t" + "\t".join(sorted(sampleDict.keys())) + "\n")
         for target_id in sorted(distDict["targetComp"].keys()):
             #Calculate average intra (within) and inter (across) clone distances.  Also want to track average pairwise distance across all samples (total_dist)
             (intra_dist, inter_dist, total_dist, num_intra, num_inter, num_total, avg_intra_dist, avg_inter_dist, avg_total_dist) = (0,0,0,0,0,0,0,0,0) #Declare value of -1 for undefined
             for (sample1,sample2) in distDict["targetComp"][target_id].keys():
+                target_info = ';'.join(sampleDict[sample1]["HipSTR"][target_id]["info"])
                 if sampleDict[sample1]["clone"] == sampleDict[sample2]["clone"] and sample1 != sample2:
                     intra_dist += distDict["targetComp"][target_id][(sample1,sample2)]
                     num_intra += 1
@@ -197,7 +200,7 @@ def calcDist(sampleDict, target_file, dist_metric, verbose, prefix):
                 else:
                     allelotype_list.append('.')
             targetOutput.write(target_id + "\t" + str(round(avg_intra_dist,2)) + "\t" + str(num_intra) + "\t" + str(round(avg_inter_dist,2)) + "\t" + str(num_inter) + "\t" + diff_bool + \
-                "\t" + str(round(avg_total_dist,2)) + "\t" + str(num_total) + "\t" + "\t".join(allelotype_list) + "\n")
+                "\t" + str(round(avg_total_dist,2)) + "\t" + str(num_total) + "\t" + target_info + "\t" + "\t".join(allelotype_list) + "\n")
         targetOutput.close()
     return distDict
 
