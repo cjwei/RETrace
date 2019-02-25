@@ -39,7 +39,7 @@ def run_HipSTR(sampleDict, vcf_output, prefix):
     hipSTR_command = "/home/cjwei/software/HipSTR/HipSTR --bams " + ",".join(sorted(readGroup_list)) + " " + \
         "--fasta /media/6TB_slot4/GenomeDB/hg19/raw_fasta/hg19_reference.fa " + \
         "--regions /home/cjwei/software/RETrace/MS/HipSTR/20171211_probes.bed " + \
-        "--str-vcf " + vcf_output + ".gz --log " + prefix + ".log --min-reads 15 --use-unpaired --no-rmdup"
+        "--str-vcf " + vcf_output + ".gz --log " + prefix + ".log --use-unpaired --no-rmdup"
     print(hipSTR_command)
     gunzip_command = "gunzip " + vcf_output
     subprocess.call(hipSTR_command, shell=True)
@@ -127,7 +127,34 @@ def plotVCF(sampleDict, prefix):
     plots.close()
     return
 
-def calcDist(sampleDict, target_file, dist_metric, verbose, prefix):
+def calcDist(sampleDict, distDict, sample1, sample2, sample1_allelotype, sample2_allelotype, final_target_list, dist_metric):
+    sum_sample1 = sum(sample1_allelotype)
+    sum_sample2 = sum(sample2_allelotype)
+    num_alleles = len(sample1_allelotype)
+    total_dist = 0
+    for target_id in final_target_list:
+        allele1 = sampleDict[sample1]["HipSTR"][target_id]["allelotype"]
+        allele2 = sampleDict[sample2]["HipSTR"][target_id]["allelotype"]
+        if dist_metric == "Abs":
+            dist = abs(allele1[0] - allele2[0]) + abs(allele1[1] - allele2[1])
+        elif dist_metric == "NormAbs":
+            dist = abs(allele1[0]/sum_sample1 - allele2[0]/sum_sample2) + abs(allele1[1]/sum_sample1 - allele2[1]/sum_sample2)
+        elif dist_metric == "EqorNot":
+            dist = 0
+            if allele1[0] != allele2[0]:
+                dist += 1
+            if allele1[1] != allele2[1]:
+                dist += 1
+        total_dist += dist
+        if target_id not in distDict["targetComp"].keys():
+            distDict["targetComp"][target_id] = {}
+        distDict["targetComp"][target_id][tuple(sorted([sample1,sample2]))] = dist #Save contribution of distance from each target_id
+    genotype_dist = total_dist/num_alleles
+    distDict["sampleComp"][sample1][sample2]["dist"] = genotype_dist
+    distDict["sampleComp"][sample1][sample2]["num_targets"] = len(final_target_list)
+    return distDict
+
+def makeDistMatrix(sampleDict, target_file, dist_metric, verbose, prefix):
     distDict = {}
     distDict["sampleComp"] = {}
     distDict["targetComp"] = {}
@@ -139,29 +166,22 @@ def calcDist(sampleDict, target_file, dist_metric, verbose, prefix):
         distDict["sampleComp"][sample1] = {}
         for sample2 in sorted(sampleDict.keys()):
             distDict["sampleComp"][sample1][sample2] = {}
-            sum_diff = 0
             target_list = set(sampleDict[sample1]["HipSTR"].keys()).intersection(set(sampleDict[sample2]["HipSTR"].keys()))
-            num_targets = 0
+            #Run through loop of shared target_id once in order to obtain lists of all alleles (sample1_allelotype, sample2_allelotype)
+            sample1_allelotype = [] #Contains all relevant alleles in sample1
+            sample2_allelotype = [] #Contains all relevant alelles in sample2
+            final_target_list = [] #Contains all relevant targetID
             for target_id in sorted(target_list):
                 try:
                     if target_id not in specified_targets:
                         continue
                 except:
                     pass
-                allelotype1 = sampleDict[sample1]["HipSTR"][target_id]["allelotype"]
-                allelotype2 = sampleDict[sample2]["HipSTR"][target_id]["allelotype"]
-                if set(allelotype1).isdisjoint(set(allelotype2)):
-                    continue
-                num_targets += 1
-                if dist_metric == "Abs":
-                    genotype_diff = abs(allelotype1[0] - allelotype2[0]) + abs(allelotype1[1] - allelotype2[1])
-                sum_diff += genotype_diff
-                if target_id not in distDict["targetComp"].keys():
-                    distDict["targetComp"][target_id] = {}
-                distDict["targetComp"][target_id][tuple(sorted([sample1,sample2]))] = genotype_diff
-            abs_diff = float(sum_diff/len(target_list))
-            distDict["sampleComp"][sample1][sample2]["dist"] = abs_diff
-            distDict["sampleComp"][sample1][sample2]["num_targets"] = num_targets
+                sample1_allelotype.extend(sampleDict[sample1]["HipSTR"][target_id]["allelotype"])
+                sample2_allelotype.extend(sampleDict[sample2]["HipSTR"][target_id]["allelotype"])
+                final_target_list.append(target_id)
+            #Use calcDist function to calculate genotype_dist between samples and contribution of each target to distance
+            distDict = calcDist(sampleDict, distDict, sample1, sample2, sample1_allelotype, sample2_allelotype, final_target_list, dist_metric)
     if verbose is True: #We want to determine useful targets
         targetOutput = open(prefix + ".stats.out", 'w')
         targetOutput.write("targetID\tIntra-clone Dist\tNum Intra-clone Pairs\tInter-clone Dist\tNum Inter-clone Pairs\tDist Bool\tTotal Dist\tNum Total Pairs\t" + \
@@ -234,7 +254,7 @@ def main():
     parser.add_argument('--input', action="store", dest="sample_info", help="Tab-delimited file containing sample information")
     parser.add_argument('--prefix', action="store", dest="prefix", help="Specify output file containing pairwise distance calculations")
     parser.add_argument('--targets', action="store", dest="target_file", default="All", help="[Optional] Specify list of targets used for distance calculation")
-    parser.add_argument('--dist', action="store", dest="dist_metric", help="Specify distance metric for pairwise comparisons", default="Abs")
+    parser.add_argument('--dist', action="store", dest="dist_metric", help="Specify distance metric for pairwise comparisons [Abs, NormAbs, EqorNot]", default="Abs")
     parser.add_argument('--vcf', action="store", dest="vcf_output")
     parser.add_argument('--min-call-qual', action="store", dest="min_qual", default=0, help="Specify the minimum posterior probability of genotype for filtering")
     parser.add_argument('--min-reads', action="store", dest="min_reads", default=1, help="Cutoff for minimum number of reads required for calling allelotype")
@@ -272,7 +292,7 @@ def main():
         plotVCF(sampleDict, args.prefix)
 
     #Calculate pairwise distance
-    distDict = calcDist(sampleDict, args.target_file, args.dist_metric, args.v, args.prefix)
+    distDict = makeDistMatrix(sampleDict, args.target_file, args.dist_metric, args.v, args.prefix)
 
     #Draw neighbor joining tree
     drawTree(distDict, sampleDict, args.prefix)
