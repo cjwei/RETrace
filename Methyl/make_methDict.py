@@ -48,6 +48,7 @@ def findctype(ref_bases):
 
 def parseMethCall(methDict, ref_fa, refDict):
     for file_name in sorted(methDict.keys()):
+        print(file_name)
         methDict[file_name]["base"] = {}
         pileup_name = file_name + ".pileup"
         methCall_name = file_name + ".methCall.tsv"
@@ -62,6 +63,8 @@ def parseMethCall(methDict, ref_fa, refDict):
             f_methCall.write("#Chr\tPos\tChain\tType\tMeth\tTotal\n")
             f_pileup = open(pileup_name)
             for line in f_pileup:
+                if len(line.split) < 6:
+                    continue
                 (chr, pos, ref, depth, bases, quality) = line.split()
                 if (ref.upper() not in ("C", "G") or
                     "random" in chr or
