@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import pickle
+import tqdm
 
 '''
 Usage: python script.py --sample ... --cellType ... --prefix ... -stats --ref_CGI ...
@@ -84,7 +85,7 @@ def calcPD(sampleDict, typeDict, seqDepth, prefix):
     PDdict["PD"] = {}
     PD_output = open(prefix + ".PD.txt", 'w')
     PD_output.write("Sample\tCell Type\tPairwise Dissimilarity\tNum Shared\n")
-    for sample_name in sorted(sampleDict.keys()):
+    for sample_name in tqdm(sorted(sampleDict.keys())):
         PDdict["PD"][sample_name] = []
         for type_name in sorted(typeDict.keys()):
             if len(typeDict[type_name]["base"].keys()) < 100000:
@@ -110,7 +111,7 @@ def calcPD(sampleDict, typeDict, seqDepth, prefix):
     #Export PDdict to file using pickle
     PDdict["index"] = sorted(typeDict.keys()) #This contains cell type names used for pandas dataframe index
 
-    with open(prefix + ".PD.pkl", 'rb') as PDdict_file:
+    with open(prefix + ".PD.pkl", 'wb') as PDdict_file:
         pickle.dump(PDdict, PDdict_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     return
