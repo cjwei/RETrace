@@ -23,6 +23,21 @@ The script will then go through and output the following statistics/files:
     3) prefix.PD.pkl = exported dictionary containing pairwise-dissimilarity between samples and cell types
 '''
 
+def CGIstats(methDict, ref_CGI):
+    for file_name in sorted(methDict.keys()):
+        methDict[file_name]["CGI"] = {}
+        sample_bed = pybedtools.BedTool(file_name+".bam")
+        ref_bed = pybedtools.BedTool(ref_CGI)
+        CGI_intersect = ref_bed.intersect(sample_bed, bed=True, wa=True, wb=True)
+        for CGI in CGI_intersect:
+            CGI_loc = CGI.fields[0] + ":" + CGI.fields[1] + "-" + CGI.fields[2]
+            read_name = CGI.fields[7]
+            if CGI_loc not in methDict[file_name]["CGI"].keys():
+                methDict[file_name]["CGI"][CGI_loc] = [read_name]
+            else:
+                methDict[file_name]["CGI"][CGI_loc].append(read_name)
+    return methDict
+
 def calcCovStats(methDict, file_name, cutoff):
     (num_CpG, total_cov) = (0, 0)
     for base_loc in sorted(methDict[file_name]["base"].keys()):
@@ -64,7 +79,7 @@ def calcStats(methDict, prefix):
     stats_output.close()
     return
 
-def calcPD(sampleDict, typeDict, typeDict_total, seqDepth, prefix):
+def calcPD(sampleDict, typeDict, seqDepth, prefix):
     PDdict = {} #We want to save all paiwise_dis and p-values as dictionary where we have ordered lists for each file analyzed (ordered alphabetically by filename)
     PDdict["PD"] = {}
     PD_output = open(prefix + ".PD.txt", 'w')
