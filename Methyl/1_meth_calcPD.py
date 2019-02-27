@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import pickle
-import tqdm
 
 '''
 Usage: python script.py --sample ... --cellType ... --prefix ... -stats --ref_CGI ...
@@ -85,7 +84,7 @@ def calcPD(sampleDict, typeDict, seqDepth, prefix):
     PDdict["PD"] = {}
     PD_output = open(prefix + ".PD.txt", 'w')
     PD_output.write("Sample\tCell Type\tPairwise Dissimilarity\tNum Shared\n")
-    for sample_name in tqdm(sorted(sampleDict.keys())):
+    for sample_name in sorted(sampleDict.keys()):
         PDdict["PD"][sample_name] = []
         for type_name in sorted(typeDict.keys()):
             if len(typeDict[type_name]["base"].keys()) < 100000:
