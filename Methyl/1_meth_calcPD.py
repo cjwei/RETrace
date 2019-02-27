@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import argparse
 import pickle
-import pybedtools
 
 '''
 Usage: python script.py --sample ... --cellType ... --prefix ... -stats --ref_CGI ...
