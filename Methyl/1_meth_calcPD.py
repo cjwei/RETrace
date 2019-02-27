@@ -109,7 +109,7 @@ def calcPD(sampleDict, typeDict, seqDepth, min_shared, prefix):
     PD_output.close()
 
     #Export PDdict to file using pickle
-    PDdict["index"] = sorted(sorted(type_list)) #This contains cell type names used for pandas dataframe index
+    PDdict["index"] = sorted(list(set(type_list))) #This contains cell type names used for pandas dataframe index
 
     with open(prefix + ".PD.pkl", 'wb') as PDdict_file:
         pickle.dump(PDdict, PDdict_file, protocol=pickle.HIGHEST_PROTOCOL)
