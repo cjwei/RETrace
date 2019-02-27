@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import pickle
+import pybedtools
 
 '''
 Usage: python script.py --sample ... --cellType ... --prefix ... -stats --ref_CGI ...
@@ -87,6 +88,8 @@ def calcPD(sampleDict, typeDict, seqDepth, prefix):
     for sample_name in sorted(sampleDict.keys()):
         PDdict["PD"][sample_name] = []
         for type_name in sorted(typeDict.keys()):
+            if len(typeDict[type_name]["base"].keys()) < 100000:
+                continue
             dis_sum = 0
             num_shared = 0
             for shared_base in sampleDict[sample_name]["base"].keys() & typeDict[type_name]["base"].keys():
