@@ -79,16 +79,15 @@ def calcStats(methDict, prefix):
     stats_output.close()
     return
 
-def calcPD(sampleDict, typeDict, seqDepth, prefix):
+def calcPD(sampleDict, typeDict, seqDepth, min_shared, prefix):
     PDdict = {} #We want to save all paiwise_dis and p-values as dictionary where we have ordered lists for each file analyzed (ordered alphabetically by filename)
     PDdict["PD"] = {}
+    type_list = []
     PD_output = open(prefix + ".PD.txt", 'w')
     PD_output.write("Sample\tCell Type\tPairwise Dissimilarity\tNum Shared\n")
     for sample_name in sorted(sampleDict.keys()):
         PDdict["PD"][sample_name] = []
         for type_name in sorted(typeDict.keys()):
-            if len(typeDict[type_name]["base"].keys()) < 100000:
-                continue
             dis_sum = 0
             num_shared = 0
             for shared_base in sampleDict[sample_name]["base"].keys() & typeDict[type_name]["base"].keys():
@@ -102,13 +101,15 @@ def calcPD(sampleDict, typeDict, seqDepth, prefix):
                                 dis_sum += 0
                             else:
                                 dis_sum += 100
-            pairwise_dis = float(dis_sum/num_shared)
-            PD_output.write(sample_name + "\t" + type_name + "\t" + str(round(pairwise_dis,4)) + "\t" + str(num_shared) + "\n")
-            PDdict["PD"][sample_name].append(pairwise_dis)
+            if num_shared >= min_shared:
+                pairwise_dis = float(dis_sum/num_shared)
+                PD_output.write(sample_name + "\t" + type_name + "\t" + str(round(pairwise_dis,4)) + "\t" + str(num_shared) + "\n")
+                PDdict["PD"][sample_name].append(pairwise_dis)
+                type_list.append(type_name)
     PD_output.close()
 
     #Export PDdict to file using pickle
-    PDdict["index"] = sorted(typeDict.keys()) #This contains cell type names used for pandas dataframe index
+    PDdict["index"] = sorted(sorted(type_list)) #This contains cell type names used for pandas dataframe index
 
     with open(prefix + ".PD.pkl", 'wb') as PDdict_file:
         pickle.dump(PDdict, PDdict_file, protocol=pickle.HIGHEST_PROTOCOL)
@@ -121,6 +122,7 @@ def main():
     parser.add_argument('--cellType', action="store", dest="cellType_pkl", help="Pre-computed methDict containing cell type information")
     parser.add_argument('--prefix', action="store", dest="prefix", help="Specifies prefix for output files")
     parser.add_argument('--seqDepth', action="store", dest="seqDepth", default=1, help="[Optional] Minimum number reads covering CpG for calculating pd")
+    parser.add_argument('--numShared', action="store", dest="min_shared", default=10000, help="[Optional] Minimum number CpG shared between each sample and cell type comparison")
     parser.add_argument('-stats', action="store_true", help="[Optional] Output statistics including unique CpG/CGI counts")
     parser.add_argument('--ref_CGI', action="store", dest="ref_CGI", help="Bed file containing reference genome CGI locations")
     args = parser.parse_args()
@@ -140,7 +142,7 @@ def main():
         calcStats(sampleDict, args.prefix)
 
     #Calculate pairwise dissimilarity matrix
-    calcPD(sampleDict, typeDict, int(args.seqDepth), args.prefix)
+    calcPD(sampleDict, typeDict, int(args.seqDepth), int(args.min_shared), args.prefix)
 
 #%%
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.ticker import MaxNLocator
 from itertools import cycle
 from tqdm import tqdm
+from ete3 import Tree #Call ETE toolkit <http://etetoolkit.org/docs/latest/tutorial/index.html>
 
 '''Usage: python script.py --input sample_list.txt --vcf output.vcf
 This script will take as input a sample list file that contains the following information:
@@ -224,7 +225,7 @@ def makeDistMatrix(sampleDict, target_file, dist_metric, verbose, prefix):
         targetOutput.close()
     return distDict
 
-def drawTree(distDict, sampleDict, prefix):
+def drawTree(distDict, sampleDict, outgroup, prefix):
     tree_output = open(prefix + ".tree.out", 'w')
     distMatrix = []
     targetMatrix = []
@@ -243,9 +244,12 @@ def drawTree(distDict, sampleDict, prefix):
     distObj = DistanceMatrix(distMatrix,sorted(sampleDict.keys()))
     NJTree = nj(distObj)
 #    NJTree = nj(distObj).root_at_midpoint() #Create rooted NJTree
-    NJNewick = nj(distObj, result_constructor=str)
-    tree_output.write(NJTree.ascii_art() + "\n")
-    tree_output.write(NJNewick + "\n")
+    tree_unrooted = nj(distObj, result_constructor=str)
+    tree_output.write("-----NJ Tree (Unrooted)-----\n" + tree_unrooted + "\n")
+    if outgroup is not "NA":
+        tree_rooted = Tree(tree_unrooted)
+        tree_rooted.set_outgroup(outgroup)
+        tree_output.write("-----NJ Tree (Rooted)-----\n" + tree_rooted.write() + "\n")
     tree_output.close()
     return
 
@@ -259,6 +263,7 @@ def main():
     parser.add_argument('--min-call-qual', action="store", dest="min_qual", default=0, help="Specify the minimum posterior probability of genotype for filtering")
     parser.add_argument('--min-reads', action="store", dest="min_reads", default=1, help="Cutoff for minimum number of reads required for calling allelotype")
     parser.add_argument('--max-stutter', action="store", dest="max_stutter", default=1, help="Define maximum number of reads that can be classified as stutter")
+    parser.add_argument('--outgroup', action="store", dest="outgroup", default="NA", help="[Optional] Specify outgroup for rooted NJ tree")
     parser.add_argument('-v', action="store_true", help="Flag for determining whether we want to output all statistics for shared targets in output")
     parser.add_argument('-plot', action="store_true", help="Flag for indicating whether we want to output a plot file visualizing msCounts per targetID")
     args = parser.parse_args()
@@ -295,7 +300,7 @@ def main():
     distDict = makeDistMatrix(sampleDict, args.target_file, args.dist_metric, args.v, args.prefix)
 
     #Draw neighbor joining tree
-    drawTree(distDict, sampleDict, args.prefix)
+    drawTree(distDict, sampleDict, args.outgroup, args.prefix)
 
 if __name__ == "__main__":
     main()

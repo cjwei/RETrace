@@ -13,11 +13,10 @@ This script will go through and plot the PDdict file comparing single cell sampl
 '''
 
 def plotPD(PDdict_pkl, prefix):
+    with open(PDdict_pkl, 'rb') as PDdict_file:
+        PDdict = pickle.load(PDdict_file)
 
-    with open(PDdict_pkl) as PDdict_file:
-        PDDict = pickle.load(PDdict_file)
-
-    PD_df = pandas.DataFrame(PDdict["PD"], index=sorted(PDDict["index"]))
+    PD_df = pandas.DataFrame(PDdict["PD"], index=sorted(PDdict["index"]))
 
     sns.set(font_scale=2)
     PD_clustermap = sns.clustermap(PD_df)
