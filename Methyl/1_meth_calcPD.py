@@ -88,6 +88,8 @@ def calcPD(sampleDict, typeDict, seqDepth, min_shared, prefix):
     for sample_name in sorted(sampleDict.keys()):
         PDdict["PD"][sample_name] = []
         for type_name in sorted(typeDict.keys()):
+            if len(typeDict[type_name]["base"].keys()) < min_shared:
+                continue
             dis_sum = 0
             num_shared = 0
             for shared_base in sampleDict[sample_name]["base"].keys() & typeDict[type_name]["base"].keys():
@@ -101,11 +103,10 @@ def calcPD(sampleDict, typeDict, seqDepth, min_shared, prefix):
                                 dis_sum += 0
                             else:
                                 dis_sum += 100
-            if num_shared >= min_shared:
-                pairwise_dis = float(dis_sum/num_shared)
-                PD_output.write(sample_name + "\t" + type_name + "\t" + str(round(pairwise_dis,4)) + "\t" + str(num_shared) + "\n")
-                PDdict["PD"][sample_name].append(pairwise_dis)
-                type_list.append(type_name)
+            pairwise_dis = float(dis_sum/num_shared)
+            PD_output.write(sample_name + "\t" + type_name + "\t" + str(round(pairwise_dis,4)) + "\t" + str(num_shared) + "\n")
+            PDdict["PD"][sample_name].append(pairwise_dis)
+            type_list.append(type_name)
     PD_output.close()
 
     #Export PDdict to file using pickle
