@@ -9,14 +9,13 @@ from Bio.Seq import Seq #Remove when running on TSCC (does not have Bio module)
 '''
 Usage: python script.py --cell_files ... --ref_fa ... --ref_CGI ... --methDict ...
 This script will import methlylation information for all given cell types or single cells and export methDict.
-The structure of typeDict is as follows:
+The structure of methDict is as follows:
     methDict
         file_name
             "base"
                 base_loc
                     "Total" = total number reads
                     "Meth" = number of methylated reads
-                    "Unmeth" = number of unmethylated reads
                     "Type" = C type (only save CpG, ignore CHH and CHG)
 '''
 
@@ -63,7 +62,7 @@ def parseMethCall(methDict, ref_fa, refDict):
             f_methCall.write("#Chr\tPos\tChain\tType\tMeth\tTotal\n")
             f_pileup = open(pileup_name)
             for line in f_pileup:
-                if len(line.split) < 6:
+                if len(line.split()) < 6:
                     continue
                 (chr, pos, ref, depth, bases, quality) = line.split()
                 if (ref.upper() not in ("C", "G") or

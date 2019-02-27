@@ -1,134 +1,31 @@
 #!/usr/bin/env python3
 import argparse
-import subprocess
-import pybedtools
-import itertools
-from Bio import SeqIO
-from Bio.Seq import Seq
-import os
+import pickle
 import pandas
 import matplotlib
 matplotlib.use('Agg')
 import seaborn as sns
 import numpy as np
-import random
 
 '''
-Usage: python script.py --sample_bams ... --cell_bams ... --ref_fa ... --prefix ...
+Usage: python script.py --sample ... --cellType ... --prefix ... -stats --ref_CGI ...
 This script is based off of SingleC_MetLevel.pl from Guo 2015 Nat Prot paper <https://doi.org/10.1038/nprot.2015.039> and Paiwise Dissimilarity calculations from Hui 2018 Stem Cell Reports paper <https://doi.org/10.1016/j.stemcr.2018.07.003>
 To run this script, we must include the following input:
-    1) sample_bams = tab-delimited file containing sample file locations and names
-    2) cell_bams = tab-delimited file containing reference cell-type file locations and names
-    2) ref.fa = reference fasta file containing sequences to which reads were mapped
-    3) cpgIslandExt.bed = reference bed file containing CGI locations across the desired reference genome
+    1) sample_methDict = pre-computed methDict containing single cell sample information.  The structure of methDict is as follows:
+    methDict
+            file_name
+                "base"
+                    base_loc
+                        "Total" = total number reads
+                        "Meth" = number of methylated reads
+                        "Type" = C type (only save CpG [indicated as "CGN"], ignore CHH and CHG)
+    2) cellType_methDict = pre-computed methDict containing reference cell type data
+    3) ref_CGI = reference bed file containing CGI locations across the desired reference genome
+    4) prefix = prefix for output files
 The script will then go through and output the following statistics/files:
-    1) input.methCov.txt = for each CpG position covered, output the following information:
-        Chr, Pos, Ref, Chain, Total Reads, Meth, UnMeth, MethRate, Ref_context, Type (eg. CpG, CHH, CHG)
-    2) prefix.covStats.txt = contains basic statistics of read coverage (i.e. num CpG/CHG/CHH read, avg read coverage).  It will also include CpG island covereage statistics.
-    3) prefix.PD.txt = summarizes pairwise dissimilarity scores between samples and given reference cell-types
+    1) prefix.PD.txt = summarizes pairwise dissimilarity scores between samples and given reference cell-types
+    2) prefix.covStats.txt = contains basic statistics of read coverage (i.e. num CpG covered, avg read coverage).  It will also include CpG island coverage statistics
 '''
-
-def parseRef(ref_fa):
-    refDict = {}
-    with open(ref_fa, "r") as ref_file:
-        for chr in SeqIO.parse(ref_file, "fasta"):
-            refDict[str(chr.id)] = str(chr.seq)
-    return refDict
-
-def findctype(ref_bases):
-    H_BASES = ("A", "T", "C")
-    if "N" in ref_bases:
-        ctype = "NA"
-        return ctype
-    if (len(ref_bases) == 2):
-        if (ref_bases[1] == "G"):
-            ctype = "CpG"
-    else:
-        if (ref_bases[1] in H_BASES and ref_bases[2] == "G"):
-            ctype = "CHG"
-        elif (ref_bases[1] in H_BASES and ref_bases[2] in H_BASES):
-            ctype = "CHH"
-        elif (ref_bases.startswith("CG")):
-            ctype = "CpG"
-    return ctype
-
-def parsePileup(methDict, ref_fa, refDict):
-    for file_name in sorted(methDict.keys()):
-        methDict[file_name]["base"] = {}
-        pileup_name = file_name + ".pileup"
-        #Check whether we already have pileup file within directory
-        if not os.path.isfile('./' + pileup_name):
-            mpileup_command = "samtools mpileup -f" + ref_fa + " " + methDict[file_name]["file_loc"] + " >" + pileup_name
-            subprocess.call(mpileup_command, shell=True)
-        #We will parse the pileup fill to determine the relevant bases (i.e. C/G's within CpG/CHG/CHH pairs) along with read count and methylation levels
-        output = open(file_name + '.methCall.txt', 'w')
-        output.write("#Chr\tPos\tRef\tChain\tTotal\tMeth\tUnMeth\tMethRate\tRef_context\tType\n")
-        f_pileup = open(pileup_name)
-        for line in f_pileup:
-            (chr, pos, ref, depth, bases, quality) = line.split()
-            if (ref.upper() not in ("C", "G") or
-                "random" in chr or
-                chr == "chrM" or
-                int(depth) == 0):
-                continue
-            tmp_pos = int(pos) - 1
-            if ("C" in ref.upper()): #We want to make case-insensitive string comparison
-                chain = "+" #We are on the '+' strand if looking at C's
-                meth = bases.upper().count('.')
-                unmeth = bases.count('T') #Methylated C's will remain C, unmethylated will be BS converted to T
-                total_bases = meth + unmeth
-                if (total_bases == 0):
-                    continue
-                #We next want to determine the C context (i.e. in CpG context) depending on reference bases at given C position
-                ref_bases = refDict[chr][tmp_pos:tmp_pos+3].upper()
-                ctype = findctype(ref_bases)
-            elif ("G" in ref.upper()):
-                chain = "-" #We are on the '-' strand if looking at G's
-                meth = bases.upper().count(',')
-                unmeth = bases.count('a') #Methylated C's (G on opposite strand) will be BS converted to A
-                total_bases = meth + unmeth
-                if (total_bases == 0):
-                    continue
-                #We want to determine the C context
-                if (tmp_pos == 0):
-                    continue
-                elif (tmp_pos == 1):
-                    ref_bases = refDict[chr][0:2].upper()
-                elif (tmp_pos > 1):
-                    tmp_pos = tmp_pos - 2
-                    ref_bases = refDict[chr][tmp_pos:tmp_pos + 3].upper()
-                #In order to determien C context, we must reverse complement the ref_bases
-                ref_bases = str(Seq(ref_bases).reverse_complement())
-                ctype = findctype(ref_bases)
-            meth_rate = meth / total_bases
-            if (ctype == "CpG"): #Only save CpG (ignore CHH and CHG)
-                output.write(chr + "\t" + pos + "\t" + ref + "\t" + chain + "\t" + str(total_bases) + "\t" + str(meth) + "\t" + str(unmeth) + "\t" + str(meth_rate) + "\t" + ref_bases + "\t" + ctype + "\n")
-                #We also want to save all of these stats to methDict"
-                base_loc = chr + ":" + pos + ";" + ref + ";" + chain
-                methDict[file_name]["base"][base_loc] = {}
-                methDict[file_name]["base"][base_loc]["Total"] = total_bases
-                methDict[file_name]["base"][base_loc]["Meth"] = meth
-                methDict[file_name]["base"][base_loc]["UnMeth"] = unmeth
-                methDict[file_name]["base"][base_loc]["Ref_context"] = ref_bases
-                methDict[file_name]["base"][base_loc]["Type"] = ctype
-        output.close()
-        f_pileup.close()
-    return methDict
-
-def CGIstats(methDict, ref_CGI):
-    for file_name in sorted(methDict.keys()):
-        methDict[file_name]["CGI"] = {}
-        sample_bed = pybedtools.BedTool(methDict[file_name]["file_loc"])
-        ref_bed = pybedtools.BedTool(ref_CGI)
-        CGI_intersect = ref_bed.intersect(sample_bed, bed=True, wa=True, wb=True)
-        for CGI in CGI_intersect:
-            CGI_loc = CGI.fields[0] + ":" + CGI.fields[1] + "-" + CGI.fields[2]
-            read_name = CGI.fields[7]
-            if CGI_loc not in methDict[file_name]["CGI"].keys():
-                methDict[file_name]["CGI"][CGI_loc] = 1 #Count number of reads per CGI location
-            else:
-                methDict[file_name]["CGI"][CGI_loc] += 1
-    return methDict
 
 def calcCovStats(methDict, file_name, cutoff):
     (num_CpG, total_cov) = (0, 0)
@@ -144,9 +41,11 @@ def calcCovStats(methDict, file_name, cutoff):
 def calcStats(methDict, prefix):
     '''
     This funciton will calculate the following statistics per file:
-        1) Total number of CpG/CHG/CHH positions covered
+        1) Total number of CpG positions covered
         2) Avg number of reads covering each position
+        3) Number CGI's covered
     '''
+    import pybedtools
     stats_output = open(prefix + ".covStats.txt", 'a+')
     stats_output.write("File\t"
         + "Unique CpG (1x)\tMean Coverage (1x)\t"
@@ -169,123 +68,60 @@ def calcStats(methDict, prefix):
     stats_output.close()
     return
 
-def calcPvalue(sample_methRate_list, type_methRate_list, pairwise_dis):
-    '''We want to calculate the P-value by randomly choosing methylation signals based on rates across all cell types and calculating PD in order to determine null distribution'''
-    num_less = 0
-    for n in range(1000):
-        dis_sum = 0
-        random.shuffle(sample_methRate_list)
-        for indx, type_methRate in enumerate(type_methRate_list):
-            if sample_methRate_list[indx] == type_methRate:
-                dis_sum += 0
-            else:
-                dis_sum += 100
-        if float(dis_sum/len(type_methRate_list)) < pairwise_dis:
-            num_less += 1
-        print(str(round(pairwise_dis,2)) + "\t" + str(round(float(dis_sum/len(type_methRate_list)),2)))
-    return float(num_less/1000)
-
 def calcPD(sampleDict, typeDict, typeDict_total, seqDepth, prefix):
     PDdict = {} #We want to save all paiwise_dis and p-values as dictionary where we have ordered lists for each file analyzed (ordered alphabetically by filename)
     PDdict["PD"] = {}
-    PDdict["p_value"] = {}
     PD_output = open(prefix + ".PD.txt", 'w')
     PD_output.write("Sample\tCell Type\tPairwise Dissimilarity\tNum Shared\n")
     for sample_name in sorted(sampleDict.keys()):
         PDdict["PD"][sample_name] = []
-        PDdict["p_value"][sample_name] = []
         for type_name in sorted(typeDict.keys()):
-            base_list = []
             dis_sum = 0
             num_shared = 0
-            sample_methRate_list = []
-            type_methRate_list = []
             for shared_base in sampleDict[sample_name]["base"].keys() & typeDict[type_name]["base"].keys():
-                if sampleDict[sample_name]["base"][shared_base]["Type"] == "CpG" and typeDict[type_name]["base"][shared_base]["Type"] == "CpG":
+                if sampleDict[sample_name]["base"][shared_base]["Type"] == "CGN" and typeDict[type_name]["base"][shared_base]["Type"] == "CGN":
                     if sampleDict[sample_name]["base"][shared_base]["Total"] >= seqDepth and typeDict[type_name]["base"][shared_base]["Total"] >= seqDepth:
                         sample_methRate = float(sampleDict[sample_name]["base"][shared_base]["Meth"]/sampleDict[sample_name]["base"][shared_base]["Total"])
                         type_methRate = float(typeDict[type_name]["base"][shared_base]["Meth"]/typeDict[type_name]["base"][shared_base]["Total"])
                         if sample_methRate.is_integer() and type_methRate.is_integer():
-                            type_probMeth = float(typeDict_total[shared_base]["Meth"]/typeDict_total[shared_base]["Total"])
-                            if not type_probMeth.is_integer(): #We want to skip bases that have the same methylation signal across all cell types
-                                sample_methRate_list.append(sample_methRate)
-                                type_methRate_list.append(type_methRate)
-                                num_shared += 1
-                                if sample_methRate == type_methRate:
-                                    dis_sum += 0
-                                else:
-                                    dis_sum += 100
+                            num_shared += 1
+                            if sample_methRate == type_methRate:
+                                dis_sum += 0
+                            else:
+                                dis_sum += 100
             pairwise_dis = float(dis_sum/num_shared)
-            print("-----" + sample_name + "\t" + type_name + "-----")
-            p_value = calcPvalue(sample_methRate_list, type_methRate_list, pairwise_dis)
-            print(str(p_value))
-            PD_output.write(sample_name + "\t" + type_name + "\t" + str(round(pairwise_dis,4)) + "\t" + str(num_shared) + "\t" + str(p_value) + "\n")
+            PD_output.write(sample_name + "\t" + type_name + "\t" + str(round(pairwise_dis,4)) + "\t" + str(num_shared) + "\n")
             PDdict["PD"][sample_name].append(pairwise_dis)
-            PDdict["p_value"][sample_name].append(p_value)
     PD_output.close()
 
     #Print clustermap using the calculated pairwise disimilarity
     PD_df = pandas.DataFrame(PDdict["PD"], index=sorted(typeDict.keys()))
-    pvalue_df = pandas.DataFrame(PDdict["p_value"], index=sorted(typeDict.keys()))
 
     sns.set(font_scale=2)
     PD_clustermap = sns.clustermap(PD_df)
     PD_clustermap.savefig(prefix + ".PD.png")
 
-    pvalue_clustermap = sns.clustermap(pvalue_df)
-    pvalue_clustermap.savefig(prefix + ".pvalue.png")
-
-#    PD_clustermap_z = sns.clustermap(PDdf, z_score=1) #Draw clustermap based on z-scores of each column (i.e. sample input) with lower z-score indicating higher similarity (lower PD)
-#    PD_clustermap_z.savefig(prefix + ".z_norm.png")
+    PD_clustermap_z = sns.clustermap(PDdf, z_score=1) #Draw clustermap based on z-scores of each column (i.e. sample input) with lower z-score indicating higher similarity (lower PD)
+    PD_clustermap_z.savefig(prefix + ".z_norm.png")
     return
 
 def main():
     parser = argparse.ArgumentParser(description="Calculate methylation coverage")
-    parser.add_argument('--sample_bams', action="store", dest="samples", help="Tab-delimited file containing the sample bam name/locations along with sample names")
-    parser.add_argument('--cell_bams', action="store", dest="cell_types", help="Tab-delimited file containing the reference cell-type specific bam files along with the known cell-type")
-    parser.add_argument('--ref_fa', action="store", dest="ref_fa", help="Genome reference fasta location")
-    parser.add_argument('--prefix', action="store", dest="prefix", default="methCov", help="Specifies prefix for output files")
-    parser.add_argument('-stats', action="store_true", help="Optional: Output statistics including unique CpG/CGI counts")
+    parser.add_argument('--sample', action="store", dest="sample_pkl", help="Pre-computed methDict containing sample information")
+    parser.add_argument('--cellType', action="store", dest="cellType_pkl", help="Pre-computed methDict containing cell type information")
+    parser.add_argument('--prefix', action="store", dest="prefix", help="Specifies prefix for output files")
+    parser.add_argument('--seqDepth', action="store", dest="seqDepth", default=1, help="[Optional] Minimum number reads covering CpG for calculating pd")
+    parser.add_argument('-stats', action="store_true", help="[Optional] Output statistics including unique CpG/CGI counts")
     parser.add_argument('--ref_CGI', action="store", dest="ref_CGI", help="Bed file containing reference genome CGI locations")
-    parser.add_argument('--seqDepth', action="store", dest="seqDepth", default=1, help="Minimum number reads covering CpG for calculating pd")
     args = parser.parse_args()
 
-    #Import reference fasta file
-    refDict = parseRef(args.ref_fa)
+    #Import sample_methDict and cellType_methDict
+    with open(args.sample_pkl, 'rb') as sample_file:
+        sampleDict = pickle.load(sample_file)
+    with open(args.cellType_pkl, 'rb') as cellType_file:
+        typeDict = pickle.load(cellType_file)
 
-    #Import methylation calls for sample files
-    sampleDict = {}
-    with open(args.samples) as f_sample:
-        for sample in f_sample:
-            (file_loc, sample_name) = sample.split()
-            sampleDict[sample_name] = {}
-            sampleDict[sample_name]["file_loc"] = file_loc
-    sampleDict = parsePileup(sampleDict, args.ref_fa, refDict)
-
-    #Import methylation calls for reference cell-type files
-    typeDict = {}
-    with open(args.cell_types) as f_cell:
-        for cell_type in f_cell:
-            (file_loc, type_name) = cell_type.split()
-            typeDict[type_name] = {}
-            typeDict[type_name]["file_loc"] = file_loc
-    typeDict = parsePileup(typeDict, args.ref_fa, refDict)
-
-    refDict.clear() #Remove refDict in order to clear up memory
-
-    #Create summary of methylation signal from all cell types per base location
-    typeDict_total = {}
-    for type_name in sorted(typeDict.keys()):
-        for base_loc in sorted(typeDict[type_name]["base"].keys()):
-            if base_loc not in typeDict_total.keys():
-                typeDict_total[base_loc] = {}
-                typeDict_total[base_loc]["Total"] = typeDict[type_name]["base"][base_loc]["Total"]
-                typeDict_total[base_loc]["Meth"] = typeDict[type_name]["base"][base_loc]["Meth"]
-            else:
-                typeDict_total[base_loc]["Total"] += typeDict[type_name]["base"][base_loc]["Total"]
-                typeDict_total[base_loc]["Meth"] += typeDict[type_name]["base"][base_loc]["Meth"]
-
-    #Caculate methylation coverage statistics
+    #Calculate methylation coverage statistics
     if args.stats is True:
         if args.ref_CGI:
             sampleDict = CGIstats(sampleDict, args.ref_CGI)
@@ -294,7 +130,7 @@ def main():
         calcStats(sampleDict, args.prefix)
 
     #Calculate pairwise dissimilarity matrix
-    calcPD(sampleDict, typeDict, typeDict_total, int(args.seqDepth), args.prefix)
+    calcPD(sampleDict, typeDict, int(args.seqDepth), args.prefix)
 
 #%%
 if __name__ == "__main__":
