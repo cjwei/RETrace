@@ -18,11 +18,11 @@ def plotPD(PDdict_pkl, prefix):
 
     PD_df = pandas.DataFrame(PDdict["PD"], index=sorted(PDdict["index"]))
 
-    sns.set(font_scale=2)
+    sns.set(font_scale=0.5)
     PD_clustermap = sns.clustermap(PD_df)
     PD_clustermap.savefig(prefix + ".PD.png")
 
-    PD_clustermap_z = sns.clustermap(PDdf, z_score=1) #Draw clustermap based on z-scores of each column (i.e. sample input) with lower z-score indicating higher similarity (lower PD)
+    PD_clustermap_z = sns.clustermap(PD_df, z_score=1) #Draw clustermap based on z-scores of each column (i.e. sample input) with lower z-score indicating higher similarity (lower PD)
     PD_clustermap_z.savefig(prefix + ".z_norm.png")
     return
 
