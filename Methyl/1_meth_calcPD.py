@@ -129,10 +129,12 @@ def main():
     args = parser.parse_args()
 
     #Import sample_methDict and cellType_methDict
-    with open(args.sample_pkl, 'rb') as sample_file:
-        sampleDict = pickle.load(sample_file)
+    print("Import typeDict")
     with open(args.cellType_pkl, 'rb') as cellType_file:
         typeDict = pickle.load(cellType_file)
+    print("Import sampleDict")
+    with open(args.sample_pkl, 'rb') as sample_file:
+        sampleDict = pickle.load(sample_file)
 
     #Calculate methylation coverage statistics
     if args.stats is True:
