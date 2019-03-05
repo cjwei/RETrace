@@ -2,6 +2,8 @@
 import argparse
 import os
 import subprocess
+import collections
+import more_itertools
 from skbio import DistanceMatrix
 from skbio.tree import nj
 import matplotlib
@@ -63,7 +65,12 @@ def parseVCF(sampleDict, vcf_output, min_qual, min_reads, max_stutter):
                 else:
                     vcf_line = line.split()
                     target_id = vcf_line[2] #This contains targetID (eg. "chr1:14290254-14290298_22xTG")
-                    target_info = vcf_line[7]
+                    #We want to parse target_info into each specific field (i.e. INFRAME_PGEOM, INFRAME_UP, DP, DSTUTTER, etc)
+                    info_name = []
+                    info_val = []
+                    for info in vcf_line[7].split(';'):
+                        info_name.append(info.split('=')[0])
+                        info_val.append(info.split('=')[1])
                     sample_format = vcf_line[9:]
                     for indx, val in enumerate(sample_format):
                         sample = sample_names[indx]
@@ -78,8 +85,35 @@ def parseVCF(sampleDict, vcf_output, min_qual, min_reads, max_stutter):
                                 sampleDict[sample]["HipSTR"][target_id]["allelotype"] = [int(i) for i in allelotype.split('|')]
                                 sampleDict[sample]["HipSTR"][target_id]["stats"] = [float(prob_genotype),int(num_reads),int(num_stutter)] #This will contain important stats for HipSTR genotype call
                                 sampleDict[sample]["HipSTR"][target_id]["msCounts"] = msCounts.split(';')
-                                sampleDict[sample]["HipSTR"][target_id]["info"] = target_info.split(';')
+                                #We want to define "info" sub-dictionary containing target info names/values
+                                info_zip = zip(info_name, info_val)
+                                sampleDict[sample]["HipSTR"][target_id]["info"] = dict(info_zip)
     return sampleDict
+
+def calcBulk(sampleDict, min_freq):
+    alleleDict = {}
+    for sample in sorted(sampleDict.keys()):
+        for target_id in sorted(sampleDict[sample]["HipSTR"].keys()):
+            if target_id not in alleleDict.keys():
+                alleleDict[target_id] = {}
+                alleleDict[target_id]["rawCounts"] = [] #Contains merged list of all single cell allelotypes
+            alleleDict[target_id]["rawCounts"].extend(sampleDict[sample]["HipSTR"][target_id]["allelotype"])
+    #Determine allele frequency from merged single cell allelotypes
+    for target_id in sorted(alleleDict.keys()):
+        print("-----\t" + target_id + "\t-----")
+        sub_len = len(target_id.split('x')[-1])
+        alleleDict[target_id]["countFreq"] = collections.Counter(alleleDict[target_id]["rawCounts"])
+        filtered_alleles = []
+        for allele, count in sorted(alleleDict[target_id]["countFreq"].items()):
+            if float(count/sum(alleleDict[target_id]["countFreq"].values())) >= min_freq: #We want to filter out and keep only alleles that have frequency of >=0.1 across all allelotypes
+                filtered_alleles.append(int(allele/sub_len)) #We only care about whole subunit mutations
+        #Group all consecutive filtered_alleles (this would indicate allele1/allele2 found in merged files)
+        alleleDict[target_id]["allele_groups"] = {}
+        # alleleDict[target_id]["allele_groups"]["All"] = [allele * sub_len for allele in list(set(filtered_alleles))]
+        for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(filtered_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
+            alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref (same as HipSTR output)
+        print(alleleDict[target_id]["allele_groups"].values())
+    return alleleDict
 
 def plotVCF(sampleDict, prefix):
     #Reformat sampleDict to use target_id as first key and sample as second key
@@ -128,34 +162,55 @@ def plotVCF(sampleDict, prefix):
     plots.close()
     return
 
-def calcDist(sampleDict, distDict, sample1, sample2, sample1_allelotype, sample2_allelotype, final_target_list, dist_metric):
-    sum_sample1 = sum(sample1_allelotype)
-    sum_sample2 = sum(sample2_allelotype)
-    num_alleles = len(sample1_allelotype)
+def calcDist(sampleDict, alleleDict, distDict, sample1, sample2, final_target_list, dist_metric):
     total_dist = 0
+    num_alleles = 0
+    print("----------" + sample1 + "\t" + sample2 + "\t" + str(len(final_target_list)) + "----------")
     for target_id in final_target_list:
-        allele1 = sampleDict[sample1]["HipSTR"][target_id]["allelotype"]
-        allele2 = sampleDict[sample2]["HipSTR"][target_id]["allelotype"]
-        if dist_metric == "Abs":
-            dist = abs(allele1[0] - allele2[0]) + abs(allele1[1] - allele2[1])
-        elif dist_metric == "NormAbs":
-            dist = abs(allele1[0]/sum_sample1 - allele2[0]/sum_sample2) + abs(allele1[1]/sum_sample1 - allele2[1]/sum_sample2)
-        elif dist_metric == "EqorNot":
-            dist = 0
-            if allele1[0] != allele2[0]:
-                dist += 1
-            if allele1[1] != allele2[1]:
-                dist += 1
-        total_dist += dist
+        target_dist = 0
+        # print(sample1 + "\t" + sample2 + "\t" + target_id + "\t" + ','.join(str(x) for x in sampleDict[sample1]["HipSTR"][target_id]["allelotype"]) + "\t" + ','.join(str(y) for y in sampleDict[sample2]["HipSTR"][target_id]["allelotype"]))
+        for allele_indx, allele_group in alleleDict[target_id]["allele_groups"].items():
+            allelotype1 = list(set(sampleDict[sample1]["HipSTR"][target_id]["allelotype"]).intersection(set(allele_group)))
+            allelotype2 = list(set(sampleDict[sample2]["HipSTR"][target_id]["allelotype"]).intersection(set(allele_group)))
+            if len(allelotype1) == 2 and len(allelotype2) == 2:
+                if dist_metric == "Abs":
+                    target_dist += min(abs(allelotype1[0] - allelotype2[0]) + abs(allelotype1[1] - allelotype2[1]), abs(allelotype1[1] - allelotype2[0]) + abs(allelotype1[0]- allelotype2[1]))
+                elif dist_metric == "EqorNot":
+                    target_dist += int(len(set(allelotype1).symmetric_difference(set(allelotype2)))/2)
+                num_alleles += 2
+            elif len(allelotype1) == 1 and len(allelotype2) == 2:
+                if dist_metric == "Abs":
+                    target_dist += min(abs(allelotype1[0] - allelotype2[0]), abs(allelotype1[0] - allelotype2[1]))
+                elif dist_metric == "EqorNot":
+                    if allelotype1[0] != allelotype2[0] and allelotype1[0] != allelotype2[1]:
+                        target_dist += 1
+                num_alleles += 1
+            elif len(allelotype1) == 2 and len(allelotype2) == 1:
+                if dist_metric == "Abs":
+                    target_dist += min(abs(allelotype1[0] - allelotype2[0]), abs(allelotype1[1] - allelotype2[0]))
+                elif dist_metric == "EqorNot":
+                    if allelotype1[0] != allelotype2[0] and allelotype1[1] != allelotype2[0]:
+                        target_dist += 1
+                num_alleles += 1
+            elif len(allelotype1) == 1 and len(allelotype2) == 1:
+                if dist_metric == "Abs":
+                    target_dist += abs(allelotype1[0] - allelotype2[0])
+                elif dist_metric == "EqorNot":
+                    if allelotype1[0] != allelotype2[0]:
+                        target_dist += 1
+                num_alleles += 1
+            if target_dist > 0:
+                print(sample1 + "\t" + sample2 + "\t" + target_id + "\t" + ','.join(str(i) for i in allele_group) + "\t" + ','.join(str(j) for j in allelotype1) + "\t" + ','.join(str(k) for k in allelotype2) + "\t" + str(target_dist))
         if target_id not in distDict["targetComp"].keys():
             distDict["targetComp"][target_id] = {}
-        distDict["targetComp"][target_id][tuple(sorted([sample1,sample2]))] = dist #Save contribution of distance from each target_id
-    genotype_dist = total_dist/num_alleles
-    distDict["sampleComp"][sample1][sample2]["dist"] = genotype_dist
+        distDict["targetComp"][target_id][tuple(sorted([sample1,sample2]))] = target_dist #Save contribution to distance from each target_id
+        total_dist += target_dist
+    print("Total Dist:\t" + str(total_dist) + "\tNum Alleles:\t" + str(num_alleles))
+    distDict["sampleComp"][sample1][sample2]["dist"] = float(total_dist/num_alleles)
     distDict["sampleComp"][sample1][sample2]["num_targets"] = len(final_target_list)
     return distDict
 
-def makeDistMatrix(sampleDict, target_file, dist_metric, verbose, prefix):
+def makeDistMatrix(sampleDict, alleleDict, target_file, dist_metric, verbose, prefix):
     distDict = {}
     distDict["sampleComp"] = {}
     distDict["targetComp"] = {}
@@ -168,9 +223,6 @@ def makeDistMatrix(sampleDict, target_file, dist_metric, verbose, prefix):
         for sample2 in sorted(sampleDict.keys()):
             distDict["sampleComp"][sample1][sample2] = {}
             target_list = set(sampleDict[sample1]["HipSTR"].keys()).intersection(set(sampleDict[sample2]["HipSTR"].keys()))
-            #Run through loop of shared target_id once in order to obtain lists of all alleles (sample1_allelotype, sample2_allelotype)
-            sample1_allelotype = [] #Contains all relevant alleles in sample1
-            sample2_allelotype = [] #Contains all relevant alelles in sample2
             final_target_list = [] #Contains all relevant targetID
             for target_id in sorted(target_list):
                 try:
@@ -178,20 +230,22 @@ def makeDistMatrix(sampleDict, target_file, dist_metric, verbose, prefix):
                         continue
                 except:
                     pass
-                sample1_allelotype.extend(sampleDict[sample1]["HipSTR"][target_id]["allelotype"])
-                sample2_allelotype.extend(sampleDict[sample2]["HipSTR"][target_id]["allelotype"])
                 final_target_list.append(target_id)
             #Use calcDist function to calculate genotype_dist between samples and contribution of each target to distance
-            distDict = calcDist(sampleDict, distDict, sample1, sample2, sample1_allelotype, sample2_allelotype, final_target_list, dist_metric)
+            distDict = calcDist(sampleDict, alleleDict, distDict, sample1, sample2, final_target_list, dist_metric)
     if verbose is True: #We want to determine useful targets
+        info_fields = ["INFRAME_PGEOM","INFRAME_UP","INFRAME_DOWN","OUTFRAME_PGEOM","OUTFRAME_UP","OUTFRAME_DOWN","START","END","PERIOD","NSKIP","NFILT","BPDIFF","DP","DSNP","DSTUTTER","DFLANKINDEL","AN","REFAC","AC"]
         targetOutput = open(prefix + ".stats.out", 'w')
         targetOutput.write("targetID\tIntra-clone Dist\tNum Intra-clone Pairs\tInter-clone Dist\tNum Inter-clone Pairs\tDist Bool\tTotal Dist\tNum Total Pairs\t" + \
-            "INFO\t" + "\t".join(sorted(sampleDict.keys())) + "\n")
+            "\t".join(info_fields) + "\t" + "\t".join(sorted(sampleDict.keys())) + "\talleleCount Freq\n")
         for target_id in sorted(distDict["targetComp"].keys()):
+            infoDict = {} #Contains overall statistics for each target_id (this will be repeated as same for all samples per target_id)
+            msCount = {} #Contains all msCounts for each sample for target_id
+            alleleCount = {} #Contains all alleles called for each sample for target_id
             #Calculate average intra (within) and inter (across) clone distances.  Also want to track average pairwise distance across all samples (total_dist)
             (intra_dist, inter_dist, total_dist, num_intra, num_inter, num_total, avg_intra_dist, avg_inter_dist, avg_total_dist) = (0,0,0,0,0,0,0,0,0) #Declare value of -1 for undefined
             for (sample1,sample2) in distDict["targetComp"][target_id].keys():
-                target_info = ';'.join(sampleDict[sample1]["HipSTR"][target_id]["info"])
+                infoDict = sampleDict[sample1]["HipSTR"][target_id]["info"]
                 if sampleDict[sample1]["clone"] == sampleDict[sample2]["clone"] and sample1 != sample2:
                     intra_dist += distDict["targetComp"][target_id][(sample1,sample2)]
                     num_intra += 1
@@ -212,16 +266,25 @@ def makeDistMatrix(sampleDict, target_file, dist_metric, verbose, prefix):
                     diff_bool = "eq"
             else:
                 diff_bool = "NA"
-            #We want to save the allotypes for all samples
-            allelotype_list = []
+            #We want to save the msCounts and allotypes for all samples
+            HipSTR_call = []
             for sample in sorted(sampleDict.keys()):
                 if target_id in sampleDict[sample]["HipSTR"].keys():
                     allelotype_info = '|'.join(str(i) for i in sampleDict[sample]["HipSTR"][target_id]["allelotype"]) + "(" + ','.join(str(j) for j in sampleDict[sample]["HipSTR"][target_id]["stats"]) + ")"
-                    allelotype_list.append(allelotype_info)
+                    HipSTR_call.append(allelotype_info)
                 else:
-                    allelotype_list.append('.')
+                    HipSTR_call.append('.')
             targetOutput.write(target_id + "\t" + str(round(avg_intra_dist,2)) + "\t" + str(num_intra) + "\t" + str(round(avg_inter_dist,2)) + "\t" + str(num_inter) + "\t" + diff_bool + \
-                "\t" + str(round(avg_total_dist,2)) + "\t" + str(num_total) + "\t" + target_info + "\t" + "\t".join(allelotype_list) + "\n")
+                "\t" + str(round(avg_total_dist,2)) + "\t" + str(num_total) + "\t")
+            for info_name in info_fields: #Print overall stutter model info for target_id
+                if info_name in infoDict.keys():
+                    targetOutput.write(infoDict[info_name] + "\t")
+                else:
+                    targetOutput.write("NA\t")
+            targetOutput.write("\t".join(HipSTR_call) + "\t")
+            for allele in sorted(alleleDict[target_id]["countFreq"], key=alleleDict[target_id]["countFreq"].get, reverse=True): #Sort dictionary by value
+                targetOutput.write(str(allele) + "," + str(round(float(alleleDict[target_id]["countFreq"][allele]/sum(alleleDict[target_id]["countFreq"].values())), 2)) + ";")
+            targetOutput.write("\n")
         targetOutput.close()
     return distDict
 
@@ -258,8 +321,9 @@ def main():
     parser.add_argument('--input', action="store", dest="sample_info", help="Tab-delimited file containing sample information")
     parser.add_argument('--prefix', action="store", dest="prefix", help="Specify output file containing pairwise distance calculations")
     parser.add_argument('--targets', action="store", dest="target_file", default="All", help="[Optional] Specify list of targets used for distance calculation")
-    parser.add_argument('--dist', action="store", dest="dist_metric", help="Specify distance metric for pairwise comparisons [Abs, NormAbs, EqorNot]", default="Abs")
+    parser.add_argument('--dist', action="store", dest="dist_metric", help="Specify distance metric for pairwise comparisons [Abs, EqorNot]", default="EqorNot")
     parser.add_argument('--vcf', action="store", dest="vcf_output")
+    parser.add_argument('--min-freq', action="store", dest="min_freq", default=0.1, help="Specify required minimum frequency across all single cell to keep allelotype")
     parser.add_argument('--min-call-qual', action="store", dest="min_qual", default=0, help="Specify the minimum posterior probability of genotype for filtering")
     parser.add_argument('--min-reads', action="store", dest="min_reads", default=1, help="Cutoff for minimum number of reads required for calling allelotype")
     parser.add_argument('--max-stutter', action="store", dest="max_stutter", default=1, help="Define maximum number of reads that can be classified as stutter")
@@ -292,12 +356,15 @@ def main():
     #Parse vcf file to import HipSTR allelotypes
     sampleDict = parseVCF(sampleDict, args.vcf_output, float(args.min_qual), int(args.min_reads), float(args.max_stutter))
 
+    #Calculate "bulk" allelotype counts by merging all single cell HipSTR calls
+    alleleDict = calcBulk(sampleDict, float(args.min_freq))
+
     #Plot msCounts and allelotype if -plot flag is used
     if args.plot is True:
         plotVCF(sampleDict, args.prefix)
 
     #Calculate pairwise distance
-    distDict = makeDistMatrix(sampleDict, args.target_file, args.dist_metric, args.v, args.prefix)
+    distDict = makeDistMatrix(sampleDict, alleleDict, args.target_file, args.dist_metric, args.v, args.prefix)
 
     #Draw neighbor joining tree
     drawTree(distDict, sampleDict, args.outgroup, args.prefix)
