@@ -14,6 +14,7 @@ from matplotlib.ticker import MaxNLocator
 from itertools import cycle
 from tqdm import tqdm
 from ete3 import Tree #Call ETE toolkit <http://etetoolkit.org/docs/latest/tutorial/index.html>
+import numpy as np
 
 '''Usage: python script.py --input sample_list.txt --vcf output.vcf
 This script will take as input a sample list file that contains the following information:
@@ -210,23 +211,20 @@ def calcDist(sampleDict, alleleDict, distDict, sample1, sample2, final_target_li
     distDict["sampleComp"][sample1][sample2]["num_targets"] = len(final_target_list)
     return distDict
 
-def makeDistMatrix(sampleDict, alleleDict, target_file, dist_metric, verbose, prefix):
+def makeDistMatrix(sampleDict, alleleDict, target_list, dist_metric, verbose, prefix, bootstrap):
     distDict = {}
     distDict["sampleComp"] = {}
     distDict["targetComp"] = {}
-    #We want to create a list of all targets to be used for distance calculation (specified by user)
-    if target_file != "All":
-        with open(target_file) as f:
-            specified_targets = f.read().splitlines()
+    #Calculate pairwise distance for all samples depending on shared targets (follow order specified in target_list [esp for bootstrapping, which may have duplicates due to sampling w/ replacement])
     for sample1 in sorted(sampleDict.keys()):
         distDict["sampleComp"][sample1] = {}
         for sample2 in sorted(sampleDict.keys()):
             distDict["sampleComp"][sample1][sample2] = {}
-            target_list = set(sampleDict[sample1]["HipSTR"].keys()).intersection(set(sampleDict[sample2]["HipSTR"].keys()))
-            final_target_list = [] #Contains all relevant targetID
-            for target_id in sorted(target_list):
+            shared_targets = set(sampleDict[sample1]["HipSTR"].keys()).intersection(set(sampleDict[sample2]["HipSTR"].keys()))
+            final_target_list = []
+            for target_id in sorted(target_list): #Loop through all targets specified in target_list
                 try:
-                    if target_id not in specified_targets:
+                    if target_id not in shared_targets:
                         continue
                 except:
                     pass
@@ -288,9 +286,8 @@ def makeDistMatrix(sampleDict, alleleDict, target_file, dist_metric, verbose, pr
         statsOutput.close()
     return distDict
 
-def drawTree(distDict, sampleDict, outgroup, prefix):
-    statsOutput = open(prefix + ".stats.out", 'a')
-    tree_output = open(prefix + ".tree.out", 'w')
+def drawTree(distDict, sampleDict, outgroup, prefix, bootstrap):
+    # tree_output = open(prefix + ".tree.out", 'w')
     distMatrix = []
     targetMatrix = []
     for sample1 in sorted(sampleDict.keys()):
@@ -301,27 +298,36 @@ def drawTree(distDict, sampleDict, outgroup, prefix):
             sample1_targets.append(distDict["sampleComp"][sample1][sample2]["num_targets"])
         distMatrix.append(sample1_dist)
         targetMatrix.append(sample1_targets)
-    for dist_indx,dist_list in enumerate(distMatrix): #Print matrix containing distances
-        statsOutput.write(sorted(sampleDict.keys())[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
-    for target_indx,target_list in enumerate(targetMatrix): #Print matrix containing number targets shared between each pair
-        statsOutput.write(sorted(sampleDict.keys())[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
+    if bootstrap is False: #Only output statistics for distance and number targets shared if for original tree (don't output for bootstrap resampling)
+        statsOutput = open(prefix + ".stats.out", 'a')
+        for dist_indx,dist_list in enumerate(distMatrix): #Print matrix containing distances
+            statsOutput.write(sorted(sampleDict.keys())[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
+        for target_indx,target_list in enumerate(targetMatrix): #Print matrix containing number targets shared between each pair
+            statsOutput.write(sorted(sampleDict.keys())[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
+        statsOutput.close()
     distObj = DistanceMatrix(distMatrix,sorted(sampleDict.keys()))
-    NJTree = nj(distObj)
-    # NJTree = nj(distObj).root_at_midpoint() #Create rooted NJTree
-    tree_unrooted = nj(distObj, result_constructor=str)
+    NJTree = nj(distObj, result_constructor=str)
+    tree_original = Tree(NJTree) #We use skbio to first make a tree from distance matrix then convert to ete tree
     if outgroup is "NA":
-        tree_output.write(tree_unrooted + "\n")
+        # tree_output.write(tree_unrooted.write(format=0)) + "\n")
+        return tree_original
     else:
-        tree_rooted = Tree(tree_unrooted) #Switch to ete toolkit tree
         if outgroup == "Midpoint":
-            tree_midpoint = tree_rooted.get_midpoint_outgroup()
-            tree_rooted.set_outgroup(tree_midpoint)
+            tree_midpoint = tree_original.get_midpoint_outgroup()
+            tree_original.set_outgroup(tree_midpoint)
         else:
-            tree_rooted.set_outgroup(outgroup)
-        tree_output.write(tree_rooted.write() + "\n")
-    tree_output.close()
-    statsOutput.close()
-    return
+            tree_original.set_outgroup(outgroup)
+    # tree_output.write(tree_original.write(format=0) + "\n")
+    return tree_original
+
+def bootstrapTree(nodeDict, treeTemp):
+    for temp_node in treeTemp.search_nodes():
+        leaf_list = []
+        for leaf in temp_node:
+            leaf_list.append(leaf.name)
+        if tuple(sorted(leaf_list)) in nodeDict.keys():
+            nodeDict[tuple(sorted(leaf_list))]["Bootstrap"] += 1
+    return nodeDict
 
 def main():
     parser = argparse.ArgumentParser(description="Run and analyze HipSTR output to determine distance between single cells")
@@ -337,6 +343,7 @@ def main():
     parser.add_argument('--outgroup', action="store", dest="outgroup", default="NA", help="[Optional] Specify outgroup for rooted NJ tree (if use midpoint, specify 'Midpoint')")
     parser.add_argument('-v', action="store_true", help="Flag for determining whether we want to output all statistics for shared targets in output")
     parser.add_argument('-plot', action="store_true", help="Flag for indicating whether we want to output a plot file visualizing msCounts per targetID")
+    parser.add_argument('-bootstrap', action="store_true", help="Flag for indicating whether we want to bootstrap the tree to determine node support (random sampling shared targets per cell pair)")
     args = parser.parse_args()
 
     #We want to first parse the sample_info file
@@ -370,11 +377,45 @@ def main():
     if args.plot is True:
         plotVCF(sampleDict, args.prefix)
 
+    #Calculate original tree using all targets found within alleleDict (or subset as specified in args.target_file)
+    if args.target_file is "All":
+        target_list = sorted(alleleDict.keys())
+    else:
+        with open(target_file) as f:
+            target_list = f.read().splitlines()
     #Calculate pairwise distance
-    distDict = makeDistMatrix(sampleDict, alleleDict, args.target_file, args.dist_metric, args.v, args.prefix)
-
+    distDict_original = makeDistMatrix(sampleDict, alleleDict, target_list, args.dist_metric, args.v, args.prefix, False)
     #Draw neighbor joining tree
-    drawTree(distDict, sampleDict, args.outgroup, args.prefix)
+    tree_original = drawTree(distDict_original, sampleDict, args.outgroup, args.prefix, False) #We want to declare Fase for args.bootstrap because we want to output stats file for original tree
+
+    #Bootstrap resample to create new distance matrices/trees and add support values to internal nodes of original tree
+    if args.bootstrap is True:
+        #Determine dictionary of tree nodes from tree_original
+        nodeDict = {}
+        for node in tree_original.search_nodes():
+            leaf_list = []
+            for leaf in node:
+                leaf_list.append(leaf.name) #We need to compare leaves in a node cluster without regard to order
+            nodeDict[tuple(sorted(leaf_list))] = {}
+            nodeDict[tuple(sorted(leaf_list))]["Bootstrap"] = 0 #Contains values for number of times random bootstrap tree (tree_temp) contains given node
+            nodeDict[tuple(sorted(leaf_list))]["NodeID"] = node.write(format = 9)
+        for i in tqdm(range(10)): #Bootstrap resample 1000 times
+            #Random downsample from pool of available targets (target_list) to use for distance calculation
+            bootstrap_targets = list(np.random.choice(target_list, len(target_list), replace=True))
+            distDict_temp = makeDistMatrix(sampleDict, alleleDict, bootstrap_targets, args.dist_metric, False, args.prefix, args.bootstrap)
+            tree_temp = drawTree(distDict_temp, sampleDict, args.outgroup, args.prefix, args.bootstrap)
+            nodeDict = bootstrapTree(nodeDict, tree_temp) #Determine whether each node in original tree is found in tree_temp
+        #Add support information to original tree
+        for node in tree_original.search_nodes():
+            leaf_list = []
+            for leaf in node:
+                leaf_list.append(leaf.name)
+            node.add_features(support = round(nodeDict[tuple(sorted(leaf_list))]["Bootstrap"]/10,2))
+
+    #Output tree (if bootstrapped, output with support values)
+    tree_output = open(args.prefix + ".tree.out", 'w')
+    tree_output.write(tree_original.write(format = 0) + "\n")
+    tree_output.close()
 
 if __name__ == "__main__":
     main()
