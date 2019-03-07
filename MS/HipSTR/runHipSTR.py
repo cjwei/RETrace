@@ -100,7 +100,7 @@ def calcBulk(sampleDict, min_freq):
             alleleDict[target_id]["rawCounts"].extend(sampleDict[sample]["HipSTR"][target_id]["allelotype"])
     #Determine allele frequency from merged single cell allelotypes
     for target_id in sorted(alleleDict.keys()):
-        print("-----\t" + target_id + "\t-----")
+        # print("-----\t" + target_id + "\t-----")
         sub_len = len(target_id.split('x')[-1])
         alleleDict[target_id]["countFreq"] = collections.Counter(alleleDict[target_id]["rawCounts"])
         filtered_alleles = []
@@ -112,7 +112,7 @@ def calcBulk(sampleDict, min_freq):
         # alleleDict[target_id]["allele_groups"]["All"] = [allele * sub_len for allele in list(set(filtered_alleles))]
         for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(filtered_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
             alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref (same as HipSTR output)
-        print(alleleDict[target_id]["allele_groups"].values())
+        # print(alleleDict[target_id]["allele_groups"].values())
     return alleleDict
 
 def plotVCF(sampleDict, prefix):
@@ -165,7 +165,7 @@ def plotVCF(sampleDict, prefix):
 def calcDist(sampleDict, alleleDict, distDict, sample1, sample2, final_target_list, dist_metric):
     total_dist = 0
     num_alleles = 0
-    print("----------" + sample1 + "\t" + sample2 + "\t" + str(len(final_target_list)) + "----------")
+    # print("----------" + sample1 + "\t" + sample2 + "\t" + str(len(final_target_list)) + "----------")
     for target_id in final_target_list:
         target_dist = 0
         # print(sample1 + "\t" + sample2 + "\t" + target_id + "\t" + ','.join(str(x) for x in sampleDict[sample1]["HipSTR"][target_id]["allelotype"]) + "\t" + ','.join(str(y) for y in sampleDict[sample2]["HipSTR"][target_id]["allelotype"]))
@@ -199,13 +199,13 @@ def calcDist(sampleDict, alleleDict, distDict, sample1, sample2, final_target_li
                     if allelotype1[0] != allelotype2[0]:
                         target_dist += 1
                 num_alleles += 1
-            if target_dist > 0:
-                print(sample1 + "\t" + sample2 + "\t" + target_id + "\t" + ','.join(str(i) for i in allele_group) + "\t" + ','.join(str(j) for j in allelotype1) + "\t" + ','.join(str(k) for k in allelotype2) + "\t" + str(target_dist))
+            # if target_dist > 0:
+            #     print(sample1 + "\t" + sample2 + "\t" + target_id + "\t" + ','.join(str(i) for i in allele_group) + "\t" + ','.join(str(j) for j in allelotype1) + "\t" + ','.join(str(k) for k in allelotype2) + "\t" + str(target_dist))
         if target_id not in distDict["targetComp"].keys():
             distDict["targetComp"][target_id] = {}
         distDict["targetComp"][target_id][tuple(sorted([sample1,sample2]))] = target_dist #Save contribution to distance from each target_id
         total_dist += target_dist
-    print("Total Dist:\t" + str(total_dist) + "\tNum Alleles:\t" + str(num_alleles))
+    # print("Total Dist:\t" + str(total_dist) + "\tNum Alleles:\t" + str(num_alleles))
     distDict["sampleComp"][sample1][sample2]["dist"] = float(total_dist/num_alleles)
     distDict["sampleComp"][sample1][sample2]["num_targets"] = len(final_target_list)
     return distDict
@@ -235,8 +235,8 @@ def makeDistMatrix(sampleDict, alleleDict, target_file, dist_metric, verbose, pr
             distDict = calcDist(sampleDict, alleleDict, distDict, sample1, sample2, final_target_list, dist_metric)
     if verbose is True: #We want to determine useful targets
         info_fields = ["INFRAME_PGEOM","INFRAME_UP","INFRAME_DOWN","OUTFRAME_PGEOM","OUTFRAME_UP","OUTFRAME_DOWN","START","END","PERIOD","NSKIP","NFILT","BPDIFF","DP","DSNP","DSTUTTER","DFLANKINDEL","AN","REFAC","AC"]
-        targetOutput = open(prefix + ".stats.out", 'w')
-        targetOutput.write("targetID\tIntra-clone Dist\tNum Intra-clone Pairs\tInter-clone Dist\tNum Inter-clone Pairs\tDist Bool\tTotal Dist\tNum Total Pairs\t" + \
+        statsOutput = open(prefix + ".stats.out", 'w')
+        statsOutput.write("targetID\tIntra-clone Dist\tNum Intra-clone Pairs\tInter-clone Dist\tNum Inter-clone Pairs\tDist Bool\tTotal Dist\tNum Total Pairs\t" + \
             "\t".join(info_fields) + "\t" + "\t".join(sorted(sampleDict.keys())) + "\talleleCount Freq\n")
         for target_id in sorted(distDict["targetComp"].keys()):
             infoDict = {} #Contains overall statistics for each target_id (this will be repeated as same for all samples per target_id)
@@ -274,21 +274,22 @@ def makeDistMatrix(sampleDict, alleleDict, target_file, dist_metric, verbose, pr
                     HipSTR_call.append(allelotype_info)
                 else:
                     HipSTR_call.append('.')
-            targetOutput.write(target_id + "\t" + str(round(avg_intra_dist,2)) + "\t" + str(num_intra) + "\t" + str(round(avg_inter_dist,2)) + "\t" + str(num_inter) + "\t" + diff_bool + \
+            statsOutput.write(target_id + "\t" + str(round(avg_intra_dist,2)) + "\t" + str(num_intra) + "\t" + str(round(avg_inter_dist,2)) + "\t" + str(num_inter) + "\t" + diff_bool + \
                 "\t" + str(round(avg_total_dist,2)) + "\t" + str(num_total) + "\t")
             for info_name in info_fields: #Print overall stutter model info for target_id
                 if info_name in infoDict.keys():
-                    targetOutput.write(infoDict[info_name] + "\t")
+                    statsOutput.write(infoDict[info_name] + "\t")
                 else:
-                    targetOutput.write("NA\t")
-            targetOutput.write("\t".join(HipSTR_call) + "\t")
+                    statsOutput.write("NA\t")
+            statsOutput.write("\t".join(HipSTR_call) + "\t")
             for allele in sorted(alleleDict[target_id]["countFreq"], key=alleleDict[target_id]["countFreq"].get, reverse=True): #Sort dictionary by value
-                targetOutput.write(str(allele) + "," + str(round(float(alleleDict[target_id]["countFreq"][allele]/sum(alleleDict[target_id]["countFreq"].values())), 2)) + ";")
-            targetOutput.write("\n")
-        targetOutput.close()
+                statsOutput.write(str(allele) + "," + str(round(float(alleleDict[target_id]["countFreq"][allele]/sum(alleleDict[target_id]["countFreq"].values())), 2)) + ";")
+            statsOutput.write("\n")
+        statsOutput.close()
     return distDict
 
 def drawTree(distDict, sampleDict, outgroup, prefix):
+    statsOutput = open(prefix + ".stats.out", 'a')
     tree_output = open(prefix + ".tree.out", 'w')
     distMatrix = []
     targetMatrix = []
@@ -301,19 +302,25 @@ def drawTree(distDict, sampleDict, outgroup, prefix):
         distMatrix.append(sample1_dist)
         targetMatrix.append(sample1_targets)
     for dist_indx,dist_list in enumerate(distMatrix): #Print matrix containing distances
-        tree_output.write(sorted(sampleDict.keys())[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
+        statsOutput.write(sorted(sampleDict.keys())[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
     for target_indx,target_list in enumerate(targetMatrix): #Print matrix containing number targets shared between each pair
-        tree_output.write(sorted(sampleDict.keys())[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
+        statsOutput.write(sorted(sampleDict.keys())[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
     distObj = DistanceMatrix(distMatrix,sorted(sampleDict.keys()))
     NJTree = nj(distObj)
-#    NJTree = nj(distObj).root_at_midpoint() #Create rooted NJTree
+    # NJTree = nj(distObj).root_at_midpoint() #Create rooted NJTree
     tree_unrooted = nj(distObj, result_constructor=str)
-    tree_output.write("-----NJ Tree (Unrooted)-----\n" + tree_unrooted + "\n")
-    if outgroup is not "NA":
-        tree_rooted = Tree(tree_unrooted)
-        tree_rooted.set_outgroup(outgroup)
-        tree_output.write("-----NJ Tree (Rooted)-----\n" + tree_rooted.write() + "\n")
+    if outgroup is "NA":
+        tree_output.write(tree_unrooted + "\n")
+    else:
+        tree_rooted = Tree(tree_unrooted) #Switch to ete toolkit tree
+        if outgroup == "Midpoint":
+            tree_midpoint = tree_rooted.get_midpoint_outgroup()
+            tree_rooted.set_outgroup(tree_midpoint)
+        else:
+            tree_rooted.set_outgroup(outgroup)
+        tree_output.write(tree_rooted.write() + "\n")
     tree_output.close()
+    statsOutput.close()
     return
 
 def main():
@@ -327,7 +334,7 @@ def main():
     parser.add_argument('--min-call-qual', action="store", dest="min_qual", default=0, help="Specify the minimum posterior probability of genotype for filtering")
     parser.add_argument('--min-reads', action="store", dest="min_reads", default=1, help="Cutoff for minimum number of reads required for calling allelotype")
     parser.add_argument('--max-stutter', action="store", dest="max_stutter", default=1, help="Define maximum number of reads that can be classified as stutter")
-    parser.add_argument('--outgroup', action="store", dest="outgroup", default="NA", help="[Optional] Specify outgroup for rooted NJ tree")
+    parser.add_argument('--outgroup', action="store", dest="outgroup", default="NA", help="[Optional] Specify outgroup for rooted NJ tree (if use midpoint, specify 'Midpoint')")
     parser.add_argument('-v', action="store_true", help="Flag for determining whether we want to output all statistics for shared targets in output")
     parser.add_argument('-plot', action="store_true", help="Flag for indicating whether we want to output a plot file visualizing msCounts per targetID")
     args = parser.parse_args()
