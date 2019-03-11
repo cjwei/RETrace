@@ -110,9 +110,9 @@ def calcBulk(sampleDict, min_freq):
                 filtered_alleles.append(int(allele/sub_len)) #We only care about whole subunit mutations
         #Group all consecutive filtered_alleles (this would indicate allele1/allele2 found in merged files)
         alleleDict[target_id]["allele_groups"] = {}
-        # alleleDict[target_id]["allele_groups"]["All"] = [allele * sub_len for allele in list(set(filtered_alleles))]
-        for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(filtered_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
-            alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref (same as HipSTR output)
+        alleleDict[target_id]["allele_groups"]["All"] = [allele * sub_len for allele in list(set(filtered_alleles))]
+        # for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(filtered_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
+        #     alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref (same as HipSTR output)
         # print(alleleDict[target_id]["allele_groups"].values())
     return alleleDict
 
@@ -356,7 +356,7 @@ def main():
                 sampleDict[sample]["bam"] = bam
                 sampleDict[sample]["clone"] = clone
             elif len(line.split()) == 2: #If clone is not specified
-                (bam, sampleName) = line.split()
+                (bam, sample) = line.split()
                 sampleDict[sample] = {}
                 sampleDict[sample]["bam"] = bam
             else:
