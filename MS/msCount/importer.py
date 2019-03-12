@@ -20,4 +20,6 @@ def parseProbes(probe_file):
             targetDict[target_id]["MS_frag"] = MS_frag
             frag_seq = targetDict[target_id]["sub_seq"]*int(targetDict[target_id]["num_sub"])
             (targetDict[target_id]["up_seq"], targetDict[target_id]["down_seq"]) = MS_frag.split(frag_seq)
+
+            targetDict[target_id]["sample_msCount"] = {} #Place holder for sample msCounts in targetDict
     return targetDict

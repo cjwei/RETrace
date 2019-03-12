@@ -1,17 +1,17 @@
 import numpy as np
-import itertools
+# import itertools
 from joblib import Parallel, delayed
 import multiprocessing
-from random import sample
+# from random import sample
 
-def simple_counter(read, read_list, targetDict, target_id):
+def simple_counter(read, targetDict, target_id):
     '''This is a simple counter to determine microsatellite subunits with exact match of up_seq and down_seq'''
-    count = -1
+    num_bases = -1
     if targetDict[target_id]["up_seq"] in read and targetDict[target_id]["down_seq"] in read:
         up_start = read.index(targetDict[target_id]["up_seq"])
         down_start = read.index(targetDict[target_id]["down_seq"])
-        count = down_start-(up_start+len(targetDict[target_id]["up_seq"]))
-    return [count] * read_list.count(read)
+        num_bases = down_start-(up_start+len(targetDict[target_id]["up_seq"]))
+    return num_bases
 
 def construct(read, flank, bool): #bool=0 for up_seq, bool=1 for down_seq, bool=2 for pseudo_ref (ms).  We want to make it so that the score for match decreases as you get towards the microsatellite region for both up/down-seq.  That way, the local alignment program would more likely choose to skip rather than psuh for a match in those locations.
     read_length = len(read)
@@ -21,8 +21,13 @@ def construct(read, flank, bool): #bool=0 for up_seq, bool=1 for down_seq, bool=
 
     #We want to start backtrack from max s[i][j].  Consequently, we want to determine the maximum value of score and the location within the read (max_i) and flanking sequence (max_j).  This will then be returned from the construct subroutine
     max_s = float("-inf") #With i being the read position and j being the flanking region
-    #Initialize scoring and backtrack matrices
-    s = np.zeros((read_length + 1, flank_length + 1), dtype=int)
+    #Initialize scoring and backtrack matrices.  We want to avoid using numpy arrays because it would cause considerable slowdown
+    # s = [0] * (read_length + 1)
+    # backtrack = ['NA'] * (read_length + 1)
+    # for i in range(read_length + 1):
+    #     s[i] = [0] * (flank_length + 1)
+    #     backtrack[i] = ['NA'] * (flank_length + 1)
+    s = np.empty((read_length + 1, flank_length + 1), dtype=int)
     backtrack = np.empty((read_length + 1, flank_length + 1), dtype=object)
     for i in range(read_length + 1):
         s[i][0] = 0
@@ -83,49 +88,31 @@ def outputLCS(backtrack, i, j): #Adjustment variable may or may not be used depe
             return (i, j)
     return (i, j)
 
-def aln_counter(read, read_list, targetDict, target_id):
-    '''We incoporate "fuzzy" zones in the alignemnt where the regions at the ends of the suspected MS site and the regions of the up/down-seqs nearest the MS site (nearest the middle) will expreince less of an advantage to try to find a match.  This will push the program to just skip these regions in the local alignment, which in the end makes the MS call more accurate by getting rid of artifacts that occur more often in these more non-unique regions of the read'''
+
+def aln_counter(read, targetDict, target_id):
+    # print(str(len(read)) + "\t" + read)
+    '''We incoporate "fuzzy" zones in the alignment where the regions at the ends of the suspected MS site and the regions of the up/down-seqs nearest the MS site (nearest the middle) will expreince less of an advantage to try to find a match.  This will push the program to just skip these regions in the local alignment, which in the end makes the MS call more accurate by getting rid of artifacts that occur more often in these more non-unique regions of the read'''
     #1) We firs twant to use local alignment to substract out the up-stream sequence from teh read by determining the last base of the highest-socring match of the up-seq within the read
     (backtrack_up, max_i_up, max_j_up, max_s_up) = construct(read, targetDict[target_id]["up_seq"], 0) #max_i signifies position within read containing greatest score, max_j position within flank containing greatest score
     if max_s_up <= 0.5*len(targetDict[target_id]["up_seq"]): #Remove reads with low alignment score
-        return [-1] * read_list.count(read)
+        return -1
     ms_start  = max_i_up + (len(targetDict[target_id]["up_seq"]) - max_j_up) #This will show the true position of the microsatellite start by taking into account the flanking region that was not mapped
 
     #2) We want to use local alignment to subtract out the down-stream sequence form the read by determining the first base of the highest-socring match of the down-seq within the read
     (backtrack_down, max_i_down, max_j_down, max_s_down) = construct(read, targetDict[target_id]["down_seq"], 1)
     if max_s_down <= 0.5 * len(targetDict[target_id]["down_seq"]):
-        return [-1] * read_list.count(read)
+        return -1
     (min_i_down, min_j_down) = outputLCS(backtrack_down, max_i_down, max_j_down)
     ms_end = min_i_down - min_j_down #This will show the true position of the micorsatellite end by taking into account the flanking regions that was not mapped
 
     #3) We finally want to determine the number of subunits by subtracking ms_end and ms_start and dividding tby the length of the microsatellite subunit
     num_bases = ms_end - ms_start #We base all of our calculations off of the absolute number of bases rather than the number of subunits
-
-    return [num_bases] * read_list.count(read)
-
-# def counter(count_type, read_list, targetDict, target_id):
-#     count_list = []
-#     for read in set(read_list):
-#         if count_type == "simple":
-#             count_list.extend([simple_counter(read, targetDict, target_id)] * read_list.count(read))
-#         elif count_type == "aln":
-#             count_list.extend([aln_counter(read, targetDict, target_id)] * read_list.count(read))
-#     count_list = [x for x in count_list if x>=0] #Filter out all counts that are <0, which indicates no up/down-seq
-#     targetDict[target_id]["count_list"] = count_list
-#     return targetDict
+    return num_bases
 
 def counter(count_type, read_list, targetDict, target_id, nproc):
-    #We want to downsample the set(read_list) in order to decrease amount of computational time required for analysis
-    if len(set(read_list)) > 20:
-        analyzed_reads = sample(set(read_list), 20)
-    else:
-        analyzed_reads = set(read_list)
-    #Run microsatellite coutning
+    #Run microsatellite counting in parallel
     if count_type == "aln":
-        count_list = Parallel(n_jobs = nproc)(delayed(aln_counter)(read, read_list, targetDict, target_id) for read in analyzed_reads)
+        msCount_list = Parallel(n_jobs = nproc)(delayed(aln_counter)(read, targetDict, target_id) for read in read_list)
     elif count_type == "simple":
-        count_list = Parallel(n_jobs = nproc)(delayed(simple_counter)(read, read_list, targetDict, target_id) for read in analyzed_reads)
-    count_list = list(itertools.chain.from_iterable(count_list))
-    final_count = [x for x in count_list if x > 0] #Filter out all counts that are <= 0, which indicates no up/down-seq or no subunits counted
-    targetDict[target_id]["count_list"] = final_count
-    return targetDict
+        msCount_list = Parallel(n_jobs = nproc)(delayed(simple_counter)(read, targetDict, target_id) for read in read_list)
+    return msCount_list
