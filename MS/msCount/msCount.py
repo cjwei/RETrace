@@ -8,6 +8,9 @@ import pysam
 import numpy as np
 from tqdm import tqdm
 import pickle
+from numba import jit
+import multiprocessing
+manager = multiprocessing.Manager()
 
 '''
 Usage: python script.py --input sample_list.txt --probes probes.info.txt --prefix output_prefix
@@ -19,14 +22,25 @@ The script will then go through and output a list of microsatellite subunit coun
 '''
 
 #%%
+def multi_counter(count_type, target_group, targetDict, sampleDict, counterDict): #This module allow for multiprocessing of the counter by allowing target_id's to be processed in parallel
+    for target_id in sorted(target_group):
+        read_list = [] #Keep list of unique read sequences found across all samples
+        for sample in sorted(sampleDict.keys()): #Iterate through all sample bams in order to extract all of the reads for given target
+            samfile = pysam.AlignmentFile(sampleDict[sample]["bam"], "rb")
+            for read in samfile.fetch(targetDict[target_id]["chrom"], int(targetDict[target_id]["chromStart"]), int(targetDict[target_id]["chromEnd"])):
+                if read.query not in read_list:
+                    read_list.append(read.query)
+        counterDict[target_id] = counter(count_type, read_list, targetDict, target_id)
+    return
+
 def msCount():
     parser = argparse.ArgumentParser(description="Peform msCounts from mapped reads")
     parser.add_argument('--input', action="store", dest="sample_info", help="Tab-delimited file containing sample information")
     parser.add_argument('--probes', action="store", dest="probe_file", help="File location of probe info file summarizing targets captured")
     parser.add_argument('--prefix', action="store", dest="prefix", help="Specify output file containign pairwise distance calculations")
-    parser.add_argument('--nproc', action="store", dest="nproc", default=10, help="Number of processes for msCounting")
+    parser.add_argument('--nproc', action="store", dest="nproc", type=int, default=10, help="Number of processes for msCounting")
     parser.add_argument('--counter', action="store", dest="count_type", default="aln", help="[simple/aln] Method for microsatellite subunit counting (default: aln)")
-    parser.add_argument('--min_reads', action="store", dest="min_reads", default=10, help="Integer cutoff of number of reads required per target (default: 10)")
+    parser.add_argument('--min_reads', action="store", dest="min_reads", type=int, default=10, help="Integer cutoff of number of reads required per target (default: 10)")
     parser.add_argument('-plot', action="store_true", help="Flag for indicating whether we want to output a plot file visualzing msCounts per targetID")
     args = parser.parse_args()
 
@@ -54,18 +68,28 @@ def msCount():
         #Import targetDict from probe_file
         targetDict = parseProbes(args.probe_file)
 
-        for target_id in tqdm(sorted(targetDict.keys())):
-            read_list = [] #Keep list of unique read sequences found across all samples
-            for sample in sorted(sampleDict.keys()): #Iterate through all sample bams in order to extract all of the reads for given target
-                samfile = pysam.AlignmentFile(sampleDict[sample]["bam"], "rb")
-                for read in samfile.fetch(targetDict[target_id]["chrom"], int(targetDict[target_id]["chromStart"]), int(targetDict[target_id]["chromEnd"])):
-                    if read.query not in read_list:
-                        read_list.append(read.query)
-            msCount_list = counter(str(args.count_type), read_list, targetDict, target_id, int(args.nproc))
-            print(target_id + "\t" + str(len(read_list)) + "\t" + ','.join(str(x) for x in msCount_list))
-            #We want to re-iterate through samples in order to assign the msCount to the reads aligned for given sample
-            for sample in sorted(sampleDict.keys()): #Iterate through all sample bams in order to assign msCounts
-                sampleDict[sample]["msCount"][target_id] = []
+        #We want to perform multiprocessing using the args.nproc specified.  In order to do this, we can split target_id's into chunks of sized args.nproc
+        #This is based off of: <https://further-reading.net/2017/01/quick-tutorial-python-multiprocessing/>, <https://stackoverflow.com/questions/10415028/how-can-i-recover-the-return-value-of-a-function-passed-to-multiprocessing-proce>
+        counterDict = manager.dict() #This allows for parallel processing of msCount for multiple target_id at once
+        jobs = []
+        for target_group in [sorted(targetDict.keys())[i::args.nproc] for i in range(args.nproc)]:
+            p = multiprocessing.Process(target = multi_counter, args = (args.count_type, target_group, targetDict, sampleDict, counterDict))
+            jobs.append(p)
+            p.start()
+
+        #Join counterDict
+        for p in jobs:
+            p.join()
+
+        #Re-iterate through samples in order to assign msCount to the reads aligned for given sample (save in targetDict)
+        for target_id in sorted(counterDict.keys()):
+            #We want to extract all read and msCount info from counterDict
+            read_list = [str(count_info.split('=')[0]) for count_info in counterDict[target_id]]
+            msCount_list = [int(count_info.split('=')[1]) for count_info in counterDict[target_id]]
+            #Assign appropriate msCounts to each sample and save in targetDict
+            targetDict[target_id]["sample"] = {}
+            for sample in sorted(sampleDict.keys()):
+                targetDict[target_id]["sample"][sample] = []
                 samfile = pysam.AlignmentFile(sampleDict[sample]["bam"], "rb")
                 for read in samfile.fetch(targetDict[target_id]["chrom"], int(targetDict[target_id]["chromStart"]), int(targetDict[target_id]["chromEnd"])):
                     try:
@@ -74,23 +98,14 @@ def msCount():
                         print("Error: Unable to find read within sample")
                         return
                     if msCount_list[count_indx] > 0: #We only want to save valid msCounts for each sample
-                        sampleDict[sample]["msCount"][target_id].append(msCount_list[count_indx])
+                        targetDict[target_id]["sample"][sample].append(msCount_list[count_indx])
                 samfile.close()
-                # print(target_id + "\t" + sample + "\t" + ','.join(str(x) for x in sampleDict[sample]["msCount"][target_id]))
-                #We want to also save the information in targetDict for each sample (instead of sample as keys, we have target_id as keys)
-                if len(sampleDict[sample]["msCount"][target_id]) > args.min_reads:
-                    targetDict[target_id]["sample_msCount"][sample] = {}
-                    targetDict[target_id]["sample_msCount"][sample]["count_list"] = sorted(set(sampleDict[sample]["msCount"][target_id]))
-                    targetDict[target_id]["sample_msCount"][sample]["count_freq"] = [sampleDict[sample]["msCount"][target_id].count(i)/len(sampleDict[sample]["msCount"][target_id]) for i in sorted(set(sampleDict[sample]["msCount"][target_id]))]
-        print("Pickling sampleDict.pkl and targetDict.pkl")
-        pickle.dump(sampleDict, open(args.prefix + '.sampleDict.pkl', 'wb'))
+                if len(targetDict[target_id]["sample"][sample]) < args.min_reads: #We want to remove sample from targetDict if there are fewer than min_reads
+                    targetDict[target_id]["sample"].pop(sample, None)
+        print("Pickling targetDict.pkl")
         pickle.dump(targetDict, open(args.prefix + '.targetDict.pkl', 'wb'))
-    else:
-        print("Importing msCounts from " + args.prefix + ".sampleDict.pkl")
-        sampleDict = pickle.load(open(args.prefix + '.sampleDict.pkl', 'rb'))
-        targetDict = pickle.load(open(args.prefix + '.targetDict.pkl', 'rb'))
 
-    #Visualize msCounts
+    # Visualize msCounts
     if args.plot is True:
         print("Plotting msCounts for each sample")
         plotCounts(args.prefix, targetDict)

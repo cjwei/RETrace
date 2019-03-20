@@ -1,8 +1,9 @@
 import numpy as np
 # import itertools
-from joblib import Parallel, delayed
-import multiprocessing
+# from joblib import Parallel, delayed
+# import multiprocessing
 # from random import sample
+# from tqdm import tqdm
 
 def simple_counter(read, targetDict, target_id):
     '''This is a simple counter to determine microsatellite subunits with exact match of up_seq and down_seq'''
@@ -12,6 +13,7 @@ def simple_counter(read, targetDict, target_id):
         down_start = read.index(targetDict[target_id]["down_seq"])
         num_bases = down_start-(up_start+len(targetDict[target_id]["up_seq"]))
     return num_bases
+
 
 def construct(read, flank, bool): #bool=0 for up_seq, bool=1 for down_seq, bool=2 for pseudo_ref (ms).  We want to make it so that the score for match decreases as you get towards the microsatellite region for both up/down-seq.  That way, the local alignment program would more likely choose to skip rather than psuh for a match in those locations.
     read_length = len(read)
@@ -75,6 +77,7 @@ def construct(read, flank, bool): #bool=0 for up_seq, bool=1 for down_seq, bool=
                 max_j = j
     return backtrack, max_i, max_j, max_s
 
+
 def outputLCS(backtrack, i, j): #Adjustment variable may or may not be used depending on whether it is defined or not originally in the initial call of outputLCS (whether it is a saved in the output of the initial call of outputLCS)
     while i > 0 and j > 0:
         if backtrack[i][j] == 'down': #If there is an insertion in the read compared to the flank_seq
@@ -107,12 +110,16 @@ def aln_counter(read, targetDict, target_id):
 
     #3) We finally want to determine the number of subunits by subtracking ms_end and ms_start and dividding tby the length of the microsatellite subunit
     num_bases = ms_end - ms_start #We base all of our calculations off of the absolute number of bases rather than the number of subunits
+
     return num_bases
 
-def counter(count_type, read_list, targetDict, target_id, nproc):
+def counter(count_type, read_list, targetDict, target_id):
     #Run microsatellite counting in parallel
-    if count_type == "aln":
-        msCount_list = Parallel(n_jobs = nproc)(delayed(aln_counter)(read, targetDict, target_id) for read in read_list)
-    elif count_type == "simple":
-        msCount_list = Parallel(n_jobs = nproc)(delayed(simple_counter)(read, targetDict, target_id) for read in read_list)
+    print("Analyzing:\t" + target_id)
+    msCount_list = []
+    for read in read_list:
+        if count_type == "aln":
+            msCount_list.append(read + "=" + str(aln_counter(read, targetDict, target_id))) #Save both read sequence and msCount
+        elif count_type == "simple":
+            msCount_list.append(read + "=" + str(simple_counter(read, targetDict, target_id))) #Save both read sequence and msCount
     return msCount_list
