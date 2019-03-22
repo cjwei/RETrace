@@ -63,7 +63,7 @@ def msCount():
                 return
 
     #Perform msCount for each target_id within targetDict across all samples simultaneously (in order to decrease computational time)
-    if not os.path.isfile(args.prefix + '.sampleDict.pkl'):
+    if not os.path.isfile(args.prefix + '.targetDict.pkl'):
         print("Running msCount")
         #Import targetDict from probe_file
         targetDict = parseProbes(args.probe_file)
