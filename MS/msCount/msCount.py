@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-from importer import parseProbes
+from importer import import_targetDict, import_sampleDict
 from counter import counter
 from count_visualizer import plotCounts
 import os
@@ -17,8 +17,14 @@ Usage: python script.py --input sample_list.txt --probes probes.info.txt --prefi
 This script will take as input a sample_list.txt file that gives a summary of all the following single cell data:
     1) File locaiton of sorted sample bam
     2) Sample name
-    3) [Optional] Sample type (i.e. known clone in ex vivo tree)
-The script will then go through and output a list of microsatellite subunit counts per target per sample.  It will then output the sampleDict that contains all msCounts in a pickle file
+    3) Sex (mostly used as information for allelotyping)
+    4) [Optional] Sample type (i.e. known clone in ex vivo tree)
+The script will then go through and output a list of microsatellite subunit counts per target per sample.  It will then output the targetDict that contains all msCounts in a pickle file with the following structure:
+    targetDict
+        target_id
+            "sample"
+                sample
+                    msCount_list = list containing all msCounts for given sample at target_id
 '''
 
 #%%
@@ -37,7 +43,7 @@ def msCount():
     parser = argparse.ArgumentParser(description="Peform msCounts from mapped reads")
     parser.add_argument('--input', action="store", dest="sample_info", help="Tab-delimited file containing sample information")
     parser.add_argument('--probes', action="store", dest="probe_file", help="File location of probe info file summarizing targets captured")
-    parser.add_argument('--prefix', action="store", dest="prefix", help="Specify output file containign pairwise distance calculations")
+    parser.add_argument('--prefix', action="store", dest="prefix", help="Specify output prefix (for targetDict and alleleDict, along with any stats or plot files)")
     parser.add_argument('--nproc', action="store", dest="nproc", type=int, default=10, help="Number of processes for msCounting")
     parser.add_argument('--counter', action="store", dest="count_type", default="aln", help="[simple/aln] Method for microsatellite subunit counting (default: aln)")
     parser.add_argument('--min_reads', action="store", dest="min_reads", type=int, default=10, help="Integer cutoff of number of reads required per target (default: 10)")
@@ -45,28 +51,15 @@ def msCount():
     args = parser.parse_args()
 
     #Parse sample_info file
-    sampleDict = {}
-    with open(args.sample_info) as f:
-        for line in f:
-            if len(line.split()) == 3: #If clone is specified
-                (bam, sample, clone) = line.split()
-                sampleDict[sample] = {}
-                sampleDict[sample]["bam"] = bam
-                sampleDict[sample]["clone"] = clone
-                sampleDict[sample]["msCount"] = {} #Contains list of all msCounts found within sample/target_id
-            elif len(line.split()) == 2: #If clone is not specified
-                (bam, sample) = line.split()
-                sampleDict[sample] = {}
-                sampleDict[sample]["bam"] = bam
-            else:
-                print("Incorrect formatting for line (bam, sample, [optional] clone):\n" + "\t".join(line.split()))
-                return
+    sampleDict = importSampleDict(args.sample_info)
+    if not sampleDict:
+        return
 
     #Perform msCount for each target_id within targetDict across all samples simultaneously (in order to decrease computational time)
     if not os.path.isfile(args.prefix + '.targetDict.pkl'):
         print("Running msCount")
         #Import targetDict from probe_file
-        targetDict = parseProbes(args.probe_file)
+        targetDict = import_targetDict(args.probe_file)
 
         #We want to perform multiprocessing using the args.nproc specified.  In order to do this, we can split target_id's into chunks of sized args.nproc
         #This is based off of: <https://further-reading.net/2017/01/quick-tutorial-python-multiprocessing/>, <https://stackoverflow.com/questions/10415028/how-can-i-recover-the-return-value-of-a-function-passed-to-multiprocessing-proce>

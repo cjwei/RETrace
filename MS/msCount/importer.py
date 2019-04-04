@@ -1,4 +1,4 @@
-def parseProbes(probe_file):
+def import_targetDict(probe_file):
     '''Import probe file into targetDict'''
     targetDict = {}
     with open(probe_file) as f:
@@ -23,3 +23,22 @@ def parseProbes(probe_file):
 
             targetDict[target_id]["sample_msCount"] = {} #Place holder for sample msCounts in targetDict
     return targetDict
+
+def import_sampleDict(info_file):
+    sampleDict = {}
+    with open(info_file) as f:
+        for line in f:
+            if len(line.split()) == 4: #If clone is specified
+                (bam, sample, sex, clone) = line.split()
+                sampleDict[sample] = {}
+                sampleDict[sample]["bam"] = bam
+                sampleDict[sample]["sex"] = sex
+                sampleDict[sample]["clone"] = clone
+            elif len(line.split()) == 3: #If clone is not specified
+                (bam, sample, sex) = line.split()
+                sampleDict[sample] = {}
+                sampleDict[sample]["bam"] = bam
+                sampleDict[sample]["sex"] = sex
+            else:
+                print("Incorrect formatting for line (bam, sample, sex, [optional] clone):\n" + "\t".join(line.split()))
+    return sampleDict
