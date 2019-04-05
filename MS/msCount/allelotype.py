@@ -61,7 +61,6 @@ def simple_typing(targetDict):
             else:
                 continue
             alleleDict[target_id]["sample"][sample] = [all_msCount[indx] for indx in allele_indx]
-            # print(','.join(str(x) for x in all_msCount) + "\t" + ','.join(str(y) for y in msCount_freq) + "\t" + ','.join(str(z) for z in alleleDict[target_id]["sample"][sample]))
     return alleleDict
 
 '''Stutter allelotyping by using method similar to LobSTR'''
@@ -200,10 +199,28 @@ def stutter_typing(sampleDict, targetDict, stutterDict, min_cov, min_ratio):
             logLikeDict = {} #We want to save all log likelihoods for allelotypes into dictionary
             likeDict = {} #We want to save all likelihoods into dictionary
             alleleLikeDict = {} #We want to save allele marginal likelihoods
-            for alleleA in sorted(msCount_dict.keys()):
+            #We want to perform peak calling in order to determine most possible msCounts that could be alleles.  This is because we do not want to consider msCounts that are not local-maxima of count frequency, which most likely is not allele
+            all_msCount = [] #List of all integer number subunits in msCount range for given sample
+            msCount_freq = [] #List of number of reads for each of the above msCount in all_msCount
+            for msCount in range(min(targetDict[target_id]["sample"][sample]), max(targetDict[target_id]["sample"][sample]) + 1):
+                if msCount % len(targetDict[target_id]["sub_seq"]) == 0:
+                    all_msCount.append(msCount)
+                    if msCount in msCount_dict.keys():
+                        msCount_freq.append(msCount_dict[msCount])
+                    else:
+                        msCount_freq.append(0)
+                        msCount_dict[msCount] = 0
+            if len(all_msCount) > 2:
+                #We want to perform peak-calling on mscount and return teh respective msCount call (possible allelotype) for each peak index
+                allele_indx = peakutils.indexes(msCount_freq)
+            else: #If number of msCounts is <= 2, we want to consider all given msCount as possible alleles
+                allele_indx = range(len(all_msCount))
+            possible_alleles = [all_msCount[indx] for indx in allele_indx]
+            #We now want to calculate which of the possible_alleles is the most likely allelotype for given target/sample given all msCount
+            for alleleA in sorted(possible_alleles):
                 if alleleA not in alleleLikeDict.keys():
                     alleleLikeDict[alleleA] = 0
-                for alleleB in sorted(msCount_dict.keys()):
+                for alleleB in sorted(possible_alleles):
                     if alleleB not in alleleLikeDict.keys():
                         alleleLikeDict[alleleB] = 0
                     if alleleB < alleleA:
@@ -215,30 +232,11 @@ def stutter_typing(sampleDict, targetDict, stutterDict, min_cov, min_ratio):
                         if ("chrX" in target_id and sampleDict[sample]["sex"] == 'M') or ("chrY" in target_id and sampleDict[sample]["sex"] == 'M'):
                             continue #We only want to consider homozygous allelotypes if we are looking at male hemizygous sex chromosomes
                     if read_cov >= (min_ratio * len(msCount_list)): #We want to set a cutoff of the minimum ratio of total reads supporting the resulting allelotypes to min_ratio
-                        # print(str(alleleA) + "\t" + str(alleleB) + "\t" + str(read_cov) + "\t" + str(min_ratio * len(msCount_list)))
                         like_key = '/'.join(str(allele) for allele in sorted([alleleA, alleleB]))
                         logLikeDict[like_key] = calcLogLike(alleleA, alleleB, msCount_list, stutterDict, len(targetDict[target_id]["sub_seq"]))
-                        # likeDict[like_key] = 10**logLikeDict[like_key]
-                        # #We want to calculate allele marginal likelihood score
-                        # if alleleA == alleleB:
-                        #     alleleLikeDict[alleleA] += likeDict[like_key]
-                        # else:
-                        #     alleleLikeDict[alleleA] += likeDict[like_key]
-                        #     alleleLikeDict[alleleB] += likeDict[like_key]
-            # if sum(likeDict.values()) == 0:
             if sum(logLikeDict.values()) != 0:
                 allelotype = max(logLikeDict, key = logLikeDict.get)
-                # likeScore = likeDict[allelotype] / sum(likeDict.values())
-                # [alleleA, alleleB] = map(int, allelotype.split('/'))
-                # A_MargLike = alleleLikeDict[alleleA] / sum(likeDict.values())
-                # B_MargLike = alleleLikeDict[alleleB] / sum(likeDict.values())
                 alleleDict[target_id]["sample"][sample] = list(map(int, allelotype.split('/')))
-                print(target_id + "\t" + sample + "\t" + ','.join(str(allele) for allele in alleleDict[target_id]["sample"][sample]))
-                print(msCount_dict)
-            # print("-----\t" + target_id + "\t" + sample + "\t-----")
-            # print(msCount_dict)
-            # print(logLikeDict)
-            # print(alleleDict[target_id]["sample"][sample])
     return alleleDict
 
 def allelotype():
@@ -246,10 +244,10 @@ def allelotype():
     parser.add_argument('--input', action="store", dest="sample_info", help="Tab-delimited file containing sample information")
     parser.add_argument('--prefix', action="store", dest="prefix", help="Specify output prefix (for targetDict and alleleDict, along with any stats or plot files)")
     parser.add_argument('--allele_method', action="store", dest="allele_method", default="simple", help="Specify allelotyping algorithm used [sample/stutter]")
-    parser.add_argument('--min_cov', action="store", dest="min_cov", default=10, help="Specify minimum coverage for each target_id within each sample to call allelotype")
-    parser.add_argument('--min_ratio', action="store", dest="min_ratio", default=0.25, help="Specify minimum percentae of reads supporting the resulting allelotype [Original Perl Script = 0.7]")
-    parser.add_argument('-plot', action="store_true", help="Flag for indicating whether we want to output a plot file visualzing msCounts per targetID")
-    parser.add_argument('--num_plot', action="store", dest="num_plot", default=1000, help="If plotting allelotype, specify number of targets to plot")
+    parser.add_argument('--min_cov', action="store", dest="min_cov", default=10, help="Specify minimum coverage for each target_id within each sample to call allelotype [default = 10]")
+    parser.add_argument('--min_ratio', action="store", dest="min_ratio", default=0.0, help="Specify minimum percentae of reads supporting the resulting allelotype [default = 0.0; no filtering]")
+    parser.add_argument('--plot_file', action="store", dest="plot_file", help="Flag for indicating whether we want to output a plot file (plot_file) visualzing msCounts per targetID")
+    parser.add_argument('--num_plot', action="store", dest="num_plot", default=1784, help="If plotting allelotype, specify number of targets to plot")
     args = parser.parse_args()
 
     #Parse sample_info file
@@ -271,11 +269,12 @@ def allelotype():
         alleleDict = stutter_typing(sampleDict, targetDict, stutterDict, args.min_cov, float(args.min_ratio))
     else:
         print("Unknown allelotyping method:\t" + args.allele_method)
+    pickle.dump(alleleDict, open(args.prefix + '.alleleDict.pkl', 'wb'))
 
     #Plot allelotype and msCounts
-    if args.plot is True:
+    if args.plot_file is not None:
         print("Plotting allelotypes/msCounts for each sample")
-        plotAlleles(args.prefix, args.num_plot, targetDict, alleleDict)
+        plotAlleles(args.plot_file, int(args.num_plot), targetDict, alleleDict)
 
 if __name__ == "__main__":
     allelotype()
