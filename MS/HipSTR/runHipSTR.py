@@ -110,52 +110,60 @@ def calcBulk(sampleDict, min_freq):
                 filtered_alleles.append(int(allele/sub_len)) #We only care about whole subunit mutations
         #Group all consecutive filtered_alleles (this would indicate allele1/allele2 found in merged files)
         alleleDict[target_id]["allele_groups"] = {}
-        alleleDict[target_id]["allele_groups"]["All"] = [allele * sub_len for allele in list(set(filtered_alleles))]
-        # for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(filtered_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
-        #     alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref (same as HipSTR output)
+        # alleleDict[target_id]["allele_groups"]["All"] = [allele * sub_len for allele in list(set(filtered_alleles))] #For no allele grouping condition
+        for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(filtered_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
+            alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref (same as HipSTR output)
         # print(alleleDict[target_id]["allele_groups"].values())
     return alleleDict
 
-def plotVCF(sampleDict, prefix):
+def plotVCF(sampleDict, prefix, num_plot):
     #Reformat sampleDict to use target_id as first key and sample as second key
     targetDict = {} #Dictionary for plotting VCF
     for sample in sampleDict.keys():
         for target_id in sampleDict[sample]["HipSTR"].keys():
             if not target_id in targetDict.keys():
                 targetDict[target_id] = {}
+            msCount_list = []
+            msCount_freq = []
+            for msCount_info in sampleDict[sample]["HipSTR"][target_id]["msCounts"]:
+                if msCount_info is not '.':
+                    [msCount,freq] = msCount_info.split('|')
+                    msCount_list.append(int(msCount))
+                    msCount_freq.append(int(freq))
             targetDict[target_id][sample] = {}
+            targetDict[target_id][sample]["msCount_list"] = msCount_list
+            targetDict[target_id][sample]["msCount_freq"] = msCount_freq
             targetDict[target_id][sample]["allelotype"] = sampleDict[sample]["HipSTR"][target_id]["allelotype"]
-            allele_list = []
-            count_list = []
-            for allele_info in sampleDict[sample]["HipSTR"][target_id]["msCounts"]:
-                if allele_info is not '.':
-                    [allele,count] = allele_info.split('|')
-                    allele_list.append(int(allele))
-                    count_list.append(int(count))
-            if sum(count_list) > 0:
-                targetDict[target_id][sample]["allele_list"] = allele_list
-                targetDict[target_id][sample]["count_freq"] = [float(num)/float(sum(count_list)) for num in count_list]
-            else:
-                targetDict[target_id][sample]["allele_list"] = []
-                targetDict[target_id][sample]["count_freq"] = []
+
     #Plot MS counts
     plots = PdfPages(prefix + ".VCFplot.pdf")
     color_options = ['xkcd:pale green','xkcd:pale blue','xkcd:light grey','xkcd:pale pink']
     color_cycle = cycle(color_options)
     next_color = next(color_cycle)
-    for target_id in tqdm(sorted(targetDict.keys())):
+
+    for target_id in tqdm(sorted(targetDict.keys())[0:min(num_plot,len(targetDict.keys()))]):
+    # for target_id in tqdm(sorted(targetDict.keys())):
         if len(targetDict[target_id].keys()) >= 2:
             select_color, next_color = next_color, next(color_cycle)
         else:
             select_color = 'xkcd:white'
         for sample in sorted(targetDict[target_id].keys()):
+            if len(targetDict[target_id][sample]["msCount_list"]) < 1:
+                continue
+            #Convert msCount and allelelotype to actual bases (not just base differences from reference microsatellite)
+            sub_info = target_id.split('_')[-1]
+            [num_sub, sub_seq] = sub_info.split('x')
+            ref_len = int(num_sub) * int(len(sub_seq))
+            count_list = [(int(i) + ref_len) for i in sorted(set(targetDict[target_id][sample]["msCount_list"]))]
+            count_freq = [float(i/sum(targetDict[target_id][sample]["msCount_freq"])) for i in targetDict[target_id][sample]["msCount_freq"]]
+            allele_list = [(int(i) + ref_len) for i in sorted(targetDict[target_id][sample]["allelotype"])]
             #Plot raw alleles/msCounts (blue) along with final allelotype (red)
             ax = plt.gca()
             ax.set_ylim([0,1])
-            ax.set_xlim([min(targetDict[target_id][sample]["allelotype"]) - 5, max(targetDict[target_id][sample]["allelotype"]) + 5])
+            ax.set_xlim([min(count_list) - 5, max(count_list) + 5])
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-            plt.plot(targetDict[target_id][sample]["allelotype"], [0.5]*len(targetDict[target_id][sample]["allelotype"]), 'ro')
-            plt.vlines(targetDict[target_id][sample]["allele_list"], [0], targetDict[target_id][sample]["count_freq"], linestyle="dashed", color="b")
+            plt.plot(allele_list, [0.5]*len(allele_list), 'ro')
+            plt.vlines(count_list, [0], count_freq, linestyle="dashed", color="b")
             plt.title(target_id + ", " + sample)
             ax.set_facecolor(select_color)
             plt.savefig(plots, format='pdf')
@@ -343,6 +351,7 @@ def main():
     parser.add_argument('--outgroup', action="store", dest="outgroup", default="NA", help="[Optional] Specify outgroup for rooted NJ tree (if use midpoint, specify 'Midpoint')")
     parser.add_argument('-v', action="store_true", help="Flag for determining whether we want to output all statistics for shared targets in output")
     parser.add_argument('-plot', action="store_true", help="Flag for indicating whether we want to output a plot file visualizing msCounts per targetID")
+    parser.add_argument('--num_plot', action="store", dest="num_plot", default=1784, help="If plotting allelotype, specify number of targets to plot")
     parser.add_argument('-bootstrap', action="store_true", help="Flag for indicating whether we want to bootstrap the tree to determine node support (random sampling shared targets per cell pair)")
     args = parser.parse_args()
 
@@ -375,7 +384,7 @@ def main():
 
     #Plot msCounts and allelotype if -plot flag is used
     if args.plot is True:
-        plotVCF(sampleDict, args.prefix)
+        plotVCF(sampleDict, args.prefix, int(args.num_plot))
 
     #Calculate original tree using all targets found within alleleDict (or subset as specified in args.target_file)
     if args.target_file is "All":
