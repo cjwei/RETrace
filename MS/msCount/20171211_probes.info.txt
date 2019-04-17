@@ -1,1 +1,0 @@
-/media/6TB_slot4/cjwei/Fate_Mapping/MS+Methyl/RE_selection/hg19_RE_selector-v1.1_probes/MseI_capture_scripts/CA_order.info.txt
