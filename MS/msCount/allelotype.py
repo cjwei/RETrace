@@ -245,7 +245,7 @@ def allelotype():
     parser.add_argument('--prefix', action="store", dest="prefix", help="Specify output prefix (for targetDict and alleleDict, along with any stats or plot files)")
     parser.add_argument('--allele_method', action="store", dest="allele_method", default="simple", help="Specify allelotyping algorithm used [sample/stutter]")
     parser.add_argument('--min_cov', action="store", dest="min_cov", default=10, help="Specify minimum coverage for each target_id within each sample to call allelotype [default = 10]")
-    parser.add_argument('--min_ratio', action="store", dest="min_ratio", default=0.0, help="Specify minimum percentae of reads supporting the resulting allelotype [default = 0.0; no filtering]")
+    parser.add_argument('--min_ratio', action="store", dest="min_ratio", default=0.2, help="Specify minimum percentae of reads supporting the resulting allelotype [default = 0.2]")
     parser.add_argument('--plot_file', action="store", dest="plot_file", help="Flag for indicating whether we want to output a plot file (plot_file) visualzing msCounts per targetID")
     parser.add_argument('--num_plot', action="store", dest="num_plot", default=1784, help="If plotting allelotype, specify number of targets to plot")
     args = parser.parse_args()
