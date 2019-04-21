@@ -51,7 +51,7 @@ def msCount():
     args = parser.parse_args()
 
     #Parse sample_info file
-    sampleDict = importSampleDict(args.sample_info)
+    sampleDict = import_sampleDict(args.sample_info)
     if not sampleDict:
         return
 

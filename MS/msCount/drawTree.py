@@ -72,10 +72,13 @@ def makeDistMatrix(sampleDict, alleleDict, target_list, dist_metric, bootstrap):
         distDict["sampleComp"][sample1] = {}
         for sample2 in sorted(sampleDict.keys()):
             distDict["sampleComp"][sample1][sample2] = {}
-            shared_targets = set()
-            for target_id in sorted(alleleDict.keys()):
-                if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys() and target_id in target_list:
-                    shared_targets.add(target_id)
+            shared_targets = [] #We want to keep shared_targets as list in order to allow for repeat targets if bootstrap
+            for target_id in sorted(target_list):
+                if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys():
+                    shared_targets.append(target_id)
+            # for target_id in sorted(alleleDict.keys()):
+            #     if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys() and target_id in target_list:
+            #         shared_targets.add(target_id)
             #Use calcDist function to calculate genotype_dist between samples and contribution of each target to distance
             distDict = calcDist(alleleDict, distDict, sample1, sample2, shared_targets, dist_metric)
     return distDict
@@ -154,8 +157,8 @@ def buildPhylo():
     distDict_original = makeDistMatrix(sampleDict, alleleDict, target_list, args.dist_metric, False)
     #Draw neighbor joining tree
     tree_original = drawTree(distDict_original, sampleDict, args.outgroup, args.prefix, False) #We want to declare Fase for args.bootstrap because we want to output stats file for original tree
-    print("----------Original Tree----------")
-    print(tree_original.write(format = 0))
+    # print("----------Original Tree----------")
+    # print(tree_original.write(format = 0))
 
     #Bootstrap resample to create new distance matrices/trees and add support values to internal nodes of original tree
     if args.bootstrap is True:
@@ -179,10 +182,10 @@ def buildPhylo():
             leaf_list = []
             for leaf in node:
                 leaf_list.append(leaf.name)
-            node.add_feature(support = round(nodeDict[tuple(sorted(leaf_list))]["Bootstrap"]/10, 2))
+            node.add_features(support = round(nodeDict[tuple(sorted(leaf_list))]["Bootstrap"]/10, 2))
 
     #Output tree (if bootstrapped, output with support values)
-    print("----------Tree with Bootstrap Values----------")
+    # print("----------Tree with Bootstrap Values----------")
     print(tree_original.write(format = 0))
 
 if __name__ == "__main__":
