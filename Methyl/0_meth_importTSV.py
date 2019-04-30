@@ -6,6 +6,7 @@ import pickle
 from Bio import SeqIO #Remove when running on TSCC (does not have Bio module)
 from Bio.Seq import Seq #Remove when running on TSCC (does not have Bio module)
 import pybedtools
+from tqdm import tqdm
 
 '''
 Usage: python script.py --sample_info ... --methDict ...
@@ -20,6 +21,22 @@ methDict
             sample_name
                 (num_meth, total_reads)
 '''
+
+def printMeth(methDict, prefix):
+    print("Printing methDict csv file")
+    methTable = open(prefix + ".methDict.csv", 'w')
+    methTable.write('CpG_loc,' + ','.join(sorted(methDict["sample"].keys())) + "\n")
+    for base_loc in tqdm(sorted(methDict["base"].keys())):
+        if len(methDict["base"][base_loc].keys()) > 0.1*len(sorted(methDict["sample"].keys())): #We only want to print CpG base_loc that are shared between >10% of samples
+            meth_list = []
+            for sample_name in sorted(methDict["sample"].keys()):
+                if sample_name in methDict["base"][base_loc].keys():
+                    meth_list.append(float(methDict["base"][base_loc][sample_name][0]/methDict["base"][base_loc][sample_name][1]))
+                else:
+                    meth_list.append('')
+            methTable.write(base_loc + "," + ','.join(str(x) for x in meth_list) + "\n")
+    methTable.close()
+    return
 
 def CGIstats(methDict, ref_CGI):
     for sample_name in sorted(methDict["sample"].keys()):
@@ -97,6 +114,7 @@ def main():
     parser.add_argument('--prefix', action="store", dest="prefix", help="Prefix name for exporting methDict and coverage statistics information")
     parser.add_argument('-stats', action="store_true", help="[Optional] Output statistics including unique CpG and CGI counts")
     parser.add_argument('--ref_CGI', action="store", dest="ref_CGI", help="Bed file containing reference genome CGI locations")
+    parser.add_argument('-printMeth', action="store_true", help="[Optional] Print csv file containing all methylation calls for each CpG site (row) across all samples (column)")
     args = parser.parse_args()
 
     #Import methylation calls into methDict
@@ -122,6 +140,10 @@ def main():
         else:
             parser.error('Cannot calculate statistics without specifying ref_CGI file')
         calcStats(methDict, args.prefix)
+
+    #We want to print the methDict for downstream processing if necessary
+    if args.printMeth is True:
+        printMeth(methDict, args.prefix)
 
 #%%
 if __name__ == "__main__":
