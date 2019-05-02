@@ -4,6 +4,7 @@ import os
 import pickle
 from tqdm import tqdm
 import re
+import gzip
 
 '''
 Usage: python script.py --sample ... --gff ... --prefix ...
@@ -26,9 +27,9 @@ The script will then go through and output the following files:
 def importReg(Ensembl_gff): #High memory requirement (~40gb for hg19 Ensembl Reg Build)
     regDict = {}
     #We want to import the Ensembl Regulatory Build windows from the gff file
-    with open(Ensembl_gff) as f_gff:
+    with gzip.GzipFile(Ensembl_gff, 'rb') as f_gff:
         for line in f_gff:
-            (chr, source, reg_type, start, end, score, strand, frame, attribute) = line.split("\t") #Based on gff format on Ensembl <https://uswest.ensembl.org/info/website/upload/gff.html>
+            (chr, source, reg_type, start, end, score, strand, frame, attribute) = line.decode('utf-8').split("\t") #Based on gff format on Ensembl <https://uswest.ensembl.org/info/website/upload/gff.html>
             reg_name = reg_type + ':' + chr + ':' + start + '-' + end
             if chr not in regDict.keys():
                 if chr.startswith('GL'): #We need to make a special condition for chromosomes that start with "GL" in order to match against sampleDict
@@ -74,10 +75,11 @@ def regMeth(sampleDict, regDict, min_CpG, prefix):
                 meth_total = 0
                 unmeth_total = 0
             methRate = float((meth_total + 1) / (meth_total + unmeth_total + 2))
-            if methRate != 0.5 and methDict[reg_name][sample_name]["CpG_sites"] >= min_CpG: #We want to ensure the number of CpG sites captured per reg window is >= min_CpG
-                methRate_list.append(methRate) #Because of the way we calculate, even if sample does not have reg_name, it'll be assigned a methRate of 0.5
-            else:
-                methRate_list.append('')
+            # if methRate != 0.5 and methDict[reg_name][sample_name]["CpG_sites"] >= min_CpG: #We want to ensure the number of CpG sites captured per reg window is >= min_CpG
+            #     methRate_list.append(methRate) #Because of the way we calculate, even if sample does not have reg_name, it'll be assigned a methRate of 0.5
+            # else:
+            #     methRate_list.append('')
+            methRate_list.append(methRate) #Include if we do not want any empty calls (if no reads mapped, will have methRate of 0.5)
         f_methRate.write(reg_name + ',' + ','.join(str(x) for x in methRate_list) + "\n")
     f_methRate.close()
     return
@@ -85,7 +87,7 @@ def regMeth(sampleDict, regDict, min_CpG, prefix):
 def main():
     parser = argparse.ArgumentParser(description="Calculate methRate across Ensembl Regulatory Build windows")
     parser.add_argument('--sample', action="store", dest="sample_pkl", help="Pre-computed methDict containing sample information")
-    parser.add_argument('--gff', action="store", dest="Ensembl_gff", help="gff file containing Ensembl Regulatory Build windows")
+    parser.add_argument('--gff', action="store", dest="Ensembl_gff", help="Gzipped gff file containing Ensembl Regulatory Build windows")
     parser.add_argument('--prefix', action="store", dest="prefix", help="Output prefix for methRate.csv file")
     parser.add_argument('--min_CpG', action="store", dest="min_CpG", default=5, help="Minimum number of CpG sites within Ensembl Reg Build window")
     args = parser.parse_args()
