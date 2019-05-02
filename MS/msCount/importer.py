@@ -19,8 +19,13 @@ def import_targetDict(probe_file):
             MS_frag = line.split()[1]
             targetDict[target_id]["MS_frag"] = MS_frag
             frag_seq = targetDict[target_id]["sub_seq"]*int(targetDict[target_id]["num_sub"])
-            (targetDict[target_id]["up_seq"], targetDict[target_id]["down_seq"]) = MS_frag.split(frag_seq)
-
+            frag_split = MS_frag.split(frag_seq)
+            #There are a few cases (i.e. chr6:55179847-55179875) in which microsatellite frag_seq is found more than once in reference fragment.  Thus, we need to choose the optimal up/down-seq based on which pair has the greater length
+            (up_seq, down_seq) = ('', '')
+            for i in range(len(frag_split) - 1):
+                if len(frag_split[i]) > len(up_seq) and len(frag_split[i + 1]) > len(down_seq):
+                    (up_seq, down_seq) = frag_split[i:i+2]
+            (targetDict[target_id]["up_seq"], targetDict[target_id]["down_seq"]) = (up_seq, down_seq)
             targetDict[target_id]["sample_msCount"] = {} #Place holder for sample msCounts in targetDict
     return targetDict
 

@@ -28,7 +28,7 @@ The script will then go through and output a list of microsatellite subunit coun
 '''
 
 #%%
-def multi_counter(count_type, target_group, targetDict, sampleDict, counterDict): #This module allow for multiprocessing of the counter by allowing target_id's to be processed in parallel
+def multi_counter(count_type, target_group, targetDict, sampleDict, counterDict, prefix): #This module allow for multiprocessing of the counter by allowing target_id's to be processed in parallel
     for target_id in sorted(target_group):
         read_list = [] #Keep list of unique read sequences found across all samples
         for sample in sorted(sampleDict.keys()): #Iterate through all sample bams in order to extract all of the reads for given target
@@ -36,7 +36,7 @@ def multi_counter(count_type, target_group, targetDict, sampleDict, counterDict)
             for read in samfile.fetch(targetDict[target_id]["chrom"], int(targetDict[target_id]["chromStart"]), int(targetDict[target_id]["chromEnd"])):
                 if read.query not in read_list:
                     read_list.append(read.query)
-        counterDict[target_id] = counter(count_type, read_list, targetDict, target_id)
+        counterDict[target_id] = counter(count_type, read_list, targetDict, target_id, prefix)
     return
 
 def msCount():
@@ -66,7 +66,7 @@ def msCount():
         counterDict = manager.dict() #This allows for parallel processing of msCount for multiple target_id at once
         jobs = []
         for target_group in [sorted(targetDict.keys())[i::args.nproc] for i in range(args.nproc)]:
-            p = multiprocessing.Process(target = multi_counter, args = (args.count_type, target_group, targetDict, sampleDict, counterDict))
+            p = multiprocessing.Process(target = multi_counter, args = (args.count_type, target_group, targetDict, sampleDict, counterDict, args.prefix))
             jobs.append(p)
             p.start()
 

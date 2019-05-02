@@ -113,9 +113,9 @@ def aln_counter(read, targetDict, target_id):
 
     return num_bases
 
-def counter(count_type, read_list, targetDict, target_id):
+def counter(count_type, read_list, targetDict, target_id, prefix):
     #Run microsatellite counting in parallel
-    print("Analyzing:\t" + target_id)
+    print(prefix + "\tAnalyzing:\t" + target_id)
     msCount_list = []
     for read in read_list:
         if count_type == "aln":
