@@ -23,7 +23,7 @@ def parse_args():
     if args.command == "HipSTR_allelotype":
         from RETrace.MS.HipSTR import HipSTR_allelotype
         HipSTR_allelotype(args.sample_info, args.prefix,
-            args.picard_loc, args.HipSTR_loc,
+            args.fasta_loc, args.picard_loc, args.HipSTR_loc,
             args.target_bed, args.target_info,
             args.min_qual, args.min_reads, args.max_stutter)
 
@@ -58,6 +58,10 @@ def add_HipSTR_allelotype_subparser(subparsers):
         action="store",
         dest="prefix",
         help="Output prefix for HipSTR vcf files along with any pickle dictionaries saving allelotype information")
+    parser_HipSTR_allelotype_req.add_argument("--fasta_loc",
+        action="store",
+        dest="fasta_loc",
+        help="Location of hg19 fasta file for running HipSTR")
     parser_HipSTR_allelotype_req.add_argument("--picard_loc",
         action="store",
         dest="picard_loc",

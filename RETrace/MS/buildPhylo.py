@@ -169,7 +169,10 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
     sample_list = sorted(sampleDict.keys()) #We want to create a list containing all sample_name (for original tree prior to bootstrapping)
     distDict_original = makeDistMatrix(sample_list, alleleDict, dist_metric) #Calculate pairwise distance between each sample
     tree_original = drawTree(distDict_original, sample_list, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
-
+    f_tree = open(prefix + '.buildPhylo.newick.txt', 'a')
+    f_tree.write("-----Original Tree without Support Values-----\n")
+    f_tree.write(tree_original.write(format = 0))
+    f_tree.wrtie("\n")
     #Bootstrap resample to create new distance matrices/trees and add support values to internal nodes of original tree
     if bootstrap is True:
         #Determine dictionary of tree nodes from tree_original
@@ -198,7 +201,8 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
             else:
                 node_support = 2.0 #Assign nodes that were not present in any bootstrap simulation a value of 2.0
             node.add_features(support = node_support)
-
-    #Output tree with optional support values
-    f_tree = open(prefix + '.buildPhylo.newick', 'w')
-    f_tree.write(tree_original.write(format = 0))
+        #Output tree with optional support values
+        f_tree.write("-----Original Tree with Support Values-----\n")
+        f_tree.write(tree_original.write(format = 0))
+        f_tree.write("\n")
+    f_tree.close()

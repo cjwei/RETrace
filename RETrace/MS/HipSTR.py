@@ -4,7 +4,7 @@ import os
 import subprocess
 import pickle
 
-def run_HipSTR(sampleDict, prefix, picard_loc, HipSTR_loc, target_bed):
+def run_HipSTR(sampleDict, prefix, fasta_loc, picard_loc, HipSTR_loc, target_bed):
     '''
     Wrapper command to add readgroup to bam files and run HipSTR
     '''
@@ -22,7 +22,7 @@ def run_HipSTR(sampleDict, prefix, picard_loc, HipSTR_loc, target_bed):
             subprocess.call(readGroup_command, shell=True)
             subprocess.call(index_command, shell=True)
     HipSTR_command = HipSTR_loc + "/HipSTR --bams " + ",".join(sorted(readGroup_list)) + " " + \
-        "--fasta /media/6TB_slot4/GenomeDB/hg19/raw_fasta/hg19_reference.fa " + \
+        "--fasta " + fasta_loc + " " + \
         "--regions " + target_bed + " " + \
         "--str-vcf " + prefix + ".HipSTR.vcf.gz --log " + prefix + ".HipSTR.log --use-unpaired --no-rmdup"
     print(HipSTR_command)
@@ -53,7 +53,7 @@ def parseVCF(sampleDict, targetDict, prefix, min_qual, min_reads, max_stutter):
                     sample_names = info_line[9:] #Contains sample names from HipSTR analysis
                 else:
                     vcf_line = line.split()
-                    target_id = vcf_line[2].split('_')[0] #This contains target_id that matches with targetDict (eg. "chr1:14290254-14290298")
+                    target_id = '_'.join(vcf_line[2].split('_')[0:-1]) #This contains target_id that matches with targetDict (eg. "chr1:14290254-14290298"); also takes into account some chromosomes with '_' in the middle (such as "chrUn_*")
                     if target_id not in targetDict.keys():
                         print(target_id + " not found in targetDict.  Aborting...")
                         return
@@ -69,7 +69,7 @@ def parseVCF(sampleDict, targetDict, prefix, min_qual, min_reads, max_stutter):
                             num_reads = val.split(':')[4] #DP (number of reads used for sample's genotype)
                             num_stutter = val.split(':')[6] #DSTUTTER (number of reads with a stutter indel in the STR region)
                             msCounts = val.split(':')[-2] #ALLREADS (bp difference observed in each read's alignment)
-                            if float(prob_genotype) >= min_qual and int(num_reads) >= min_reads and float(int(num_stutter)/int(num_reads)) <= max_stutter:
+                            if float(prob_genotype) >= min_qual and int(num_reads) >= min_reads and float(int(num_stutter)/int(num_reads)) <= max_stutter and msCounts is not '.':
                                 ref_MS_len = len(targetDict[target_id]["sub_seq"]) * int(targetDict[target_id]["num_sub"])
                                 alleleDict[target_id]["sample"][sample] = {}
                                 alleleDict[target_id]["sample"][sample]["msCount"] = []
@@ -80,7 +80,7 @@ def parseVCF(sampleDict, targetDict, prefix, min_qual, min_reads, max_stutter):
     return alleleDict
 
 def HipSTR_allelotype(sample_info, prefix,
-    picard_loc, HipSTR_loc,
+    fasta_loc, picard_loc, HipSTR_loc,
     target_bed, target_info,
     min_qual, min_reads, max_stutter):
     '''
@@ -97,7 +97,7 @@ def HipSTR_allelotype(sample_info, prefix,
 
     #Run HipSTR if you haven't done so already
     if not os.path.isfile('./' + prefix + '.HipSTR.vcf'):
-        run_HipSTR(sampleDict, prefix, picard_loc, HipSTR_loc, target_bed)
+        run_HipSTR(sampleDict, prefix, fasta_loc, picard_loc, HipSTR_loc, target_bed)
 
     #Import HipSTR to alleleDict
     if not os.path.isfile('./' + prefix + '.HipSTR.alleleDict.pkl'):
