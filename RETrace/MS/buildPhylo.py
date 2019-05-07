@@ -172,7 +172,7 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
     f_tree = open(prefix + '.buildPhylo.newick.txt', 'a')
     f_tree.write("-----Original Tree without Support Values-----\n")
     f_tree.write(tree_original.write(format = 0))
-    f_tree.wrtie("\n")
+    f_tree.write("\n")
     #Bootstrap resample to create new distance matrices/trees and add support values to internal nodes of original tree
     if bootstrap is True:
         #Determine dictionary of tree nodes from tree_original
