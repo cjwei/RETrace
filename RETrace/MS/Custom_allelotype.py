@@ -73,9 +73,9 @@ def make_stutter(sampleDict, targetDict, alleleDict, prefix):
                         stutterParam[stutter_key]["xbar"] += stutterDict[stutter_key][sample]["xbar"]
                         stutterParam[stutter_key]["num_increase"] += stutterDict[stutter_key][sample]["num_increase"]
         #With the necessary statistics from a combination of the resampled files, we want to then calculate the stutter model parameters for the given bootstrap resampling
-        for stutter_key in sorted(stutterDict.keys()):
+        for stutter_key in sorted(stutterParam.keys()):
             #0) We want to skip any sub_len that have too few reads to accurately call stutter
-            if (stutterParam[stutter_key]["num_modal"] + stutterParam[stutter_key]["num_error"]) < 100:
+            if (stutterParam[stutter_key]["num_modal"] + stutterParam[stutter_key]["num_error"]) < 100 or stutterParam[stutter_key]["num_modal"] == 0 or stutterParam[stutter_key]["num_error"] == 0:
                 continue
             stutterDict[stutter_key]["bootstrap"]["num_modal"].append(int(stutterParam[stutter_key]["num_modal"]))
             stutterDict[stutter_key]["bootstrap"]["num_error"].append(int(stutterParam[stutter_key]["num_error"]))
