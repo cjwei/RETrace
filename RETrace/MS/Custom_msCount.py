@@ -2,6 +2,8 @@
 import numpy as np
 import multiprocessing
 import pysam
+from tqdm import tqdm
+import random
 manager = multiprocessing.Manager()
 
 def construct(read, flank, bool): #bool=0 for up_seq, bool=1 for down_seq, bool=2 for pseudo_ref (ms).  We want to make it so that the score for match decreases as you get towards the microsatellite region for both up/down-seq.  That way, the local alignment program would more likely choose to skip rather than psuh for a match in those locations.
@@ -95,19 +97,30 @@ def aln_counter(read, targetDict, target_id):
 
     return num_bases
 
+def simple_counter(read, targetDict, target_id):
+    '''This is a simple counter to determine microsatellite subunits with exact match of up_seq (last 10 bases) and down_seq'''
+    up_start = read.index(targetDict[target_id]["up_seq"][-10:])
+    down_start = read.index(targetDict[target_id]["down_seq"][:10])
+    num_bases = down_start-(up_start+len(targetDict[target_id]["up_seq"][-10:]))
+
+    return num_bases
+
 def counter(read_list, targetDict, target_id):
     #Run microsatellite counting in parallel
     print("Analyzing:\t" + target_id)
     msCount_list = []
     for read in read_list:
-        msCount_list.append(read + "=" + str(aln_counter(read, targetDict, target_id))) #Save both read sequence and msCount
+        # if targetDict[target_id]["up_seq"][-10:] in read and targetDict[target_id]["down_seq"][:10] in read: #Speed up processing by simple alignment if exact match to portion of up/down-seq
+        #     msCount_list.append(read + "=" + str(simple_counter(read, targetDict, target_id)))
+        # else:
+            msCount_list.append(read + "=" + str(aln_counter(read, targetDict, target_id))) #Save both read sequence and msCount
     return msCount_list
 
 def multi_counter(target_group, targetDict, sampleDict, counterDict):
     '''
     This module allos for multiprocessing of the counter by allowing target_id's to be processed in parallel
     '''
-    for target_id in sorted(target_group):
+    for target_id in tqdm(sorted(target_group)):
         read_list = [] #Keep list of unique read sequences found across all samples
         for sample in sorted(sampleDict.keys()): #Iterate through all sample bams in order to extract all of the reads for given target
             samfile = pysam.AlignmentFile(sampleDict[sample]["bam"], "rb")
@@ -134,7 +147,9 @@ def msCount(sampleDict, prefix, targetDict, nproc):
     print("Performing msCount from raw reads")
     counterDict = manager.dict() #This allows for parallel processing of msCount for multiple target_id at once
     jobs = []
-    for target_group in [sorted(targetDict.keys())[i::nproc] for i in range(nproc)]:
+    target_list = list(targetDict.keys())
+    random.shuffle(target_list) #We want to randomize in order to even processing time
+    for target_group in [target_list[i::nproc] for i in range(nproc)]:
         p = multiprocessing.Process(target = multi_counter, args = (target_group, targetDict, sampleDict, counterDict))
         jobs.append(p)
         p.start()
