@@ -39,7 +39,7 @@ def parse_args():
 
     elif args.command == "evalPhylo":
         from RETrace.MS.evalPhylo import evalPhylo
-        evalPhylo(args.sample_info, args.prefix, args.exVivo_dist, args.tree_file)
+        evalPhylo(args.sample_info, args.prefix, args.exVivo_dist, args.tree_file, args.nproc)
 
 def add_HipSTR_allelotype_subparser(subparsers):
     # create the parser for "HipSTR_allelotype" command
@@ -212,3 +212,9 @@ def add_evalPhylo_subparser(subparsers):
         action="store",
         dest="prefix",
         help="Output prefix for plot file containing proportion of correct triplets in tree")
+    parser_evalPhylo_req.add_argument("--nproc",
+        action="store",
+        dest="nproc",
+        default=10,
+        type=int,
+        help="Specify number of processors for evaluating accuracy of tree")
