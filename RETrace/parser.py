@@ -11,6 +11,7 @@ def parse_args():
 
     add_HipSTR_allelotype_subparser(subparsers)
     add_Custom_allelotype_subparser(subparsers)
+    add_merge_allelotype_subparser(subparsers)
     add_buildPhylo_subparser(subparsers)
     add_evalPhylo_subparser(subparsers)
 
@@ -31,6 +32,10 @@ def parse_args():
         from RETrace.MS.Custom import Custom_allelotype
         Custom_allelotype(args.sample_info, args.prefix,
             args.target_info, args.nproc, args.min_cov, args.min_ratio)
+
+    elif args.command == "merge_allelotype":
+        from RETrace.MS.merge import merge_allelotype
+        merge_allelotype(args.file, args.output)
 
     elif args.command == "buildPhylo":
         from RETrace.MS.buildPhylo import buildPhylo
@@ -144,6 +149,22 @@ def add_Custom_allelotype_subparser(subparsers):
         default=0.2,
         type=float,
         help="Specify minimum percentae of reads supporting the resulting allelotype")
+
+def add_merge_allelotype_subparser(subparsers):
+    # create the parser for "merge_allelotype" command
+    parser_merge_allelotype = subparsers.add_parser(
+        "merge_allelotype",
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+        help = "Merge multiple alleleDict pickle files from either Custom or HipSTR allelotyping")
+
+    parser_merge_allelotype_req = parser_merge_allelotype.add_argument_group("required inputs")
+    parser_merge_allelotype_req.add_argument("file",
+        nargs = "+",
+        help = "Input pickle alleleDict files")
+    parser_merge_allelotype_req.add_argument("--output",
+        dest = "output",
+        help = "Specify output pickle file name")
+
 
 def add_buildPhylo_subparser(subparsers):
     # create the parser for "buildPhylo" comand
