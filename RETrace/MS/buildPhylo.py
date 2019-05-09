@@ -25,7 +25,7 @@ def calcBulk(alleleDict, targetDict):
             alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref
     return alleleDict
 
-def calcDist(alleleDict, distDict, sample1, sample2, shared_targets, dist_metric):
+def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets, dist_metric):
     '''
     Calculate distance between two samples given their shared_targets and dist_metric
     '''
@@ -64,11 +64,13 @@ def calcDist(alleleDict, distDict, sample1, sample2, shared_targets, dist_metric
                         target_dist += 1
                 num_alleles += 1
         total_dist += target_dist
-    distDict["sampleComp"][sample1][sample2]["dist"] = float(total_dist/num_alleles)
-    distDict["sampleComp"][sample1][sample2]["num_targets"] = len(shared_targets)
+    distDict["sampleComp"][sample_pair] = {}
+    distDict["sampleComp"][sample_pair]["dist"] = float(total_dist/num_alleles)
+    distDict["sampleComp"][sample_pair]["num_targets"] = len(shared_targets)
+
     return distDict
 
-def makeDistMatrix(sample_list, alleleDict, dist_metric):
+def makeDistMatrix(sample_list, sharedDict, alleleDict, dist_metric):
     '''
     Wrapper for calculating distance matrix (saved within distDict), which has the following structure:
         distDict
@@ -82,15 +84,10 @@ def makeDistMatrix(sample_list, alleleDict, dist_metric):
     distDict["sampleComp"] = {}
     #Calculate pairwise distance for all samples depending on shared targets (follow order specified in target_list [esp for bootstrapping, which may have duplicates due to sampling w/ replacement])
     for sample1 in sorted(sample_list):
-        distDict["sampleComp"][sample1] = {}
         for sample2 in sorted(sample_list):
-            distDict["sampleComp"][sample1][sample2] = {}
-            shared_targets = []
-            for target_id in sorted(alleleDict.keys()):
-                if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys():
-                    if "allelotype" in alleleDict[target_id]["sample"][sample1].keys() and "allelotype" in alleleDict[target_id]["sample"][sample2].keys():
-                        shared_targets.append(target_id)
-            distDict = calcDist(alleleDict, distDict, sample1, sample2, shared_targets, dist_metric)
+            sample_pair = tuple(sorted([sample1,sample2]))
+            if sample_pair not in distDict["sampleComp"].keys():
+                distDict = calcDist(alleleDict, distDict, sample_pair, sample1, sample2, sharedDict[sample_pair], dist_metric)
     return distDict
 
 def drawTree(distDict, sample_list, outgroup, prefix, bootstrap):
@@ -103,8 +100,9 @@ def drawTree(distDict, sample_list, outgroup, prefix, bootstrap):
         sample1_dist = []
         sample1_targets = []
         for sample2 in sorted(sample_list):
-            sample1_dist.append(distDict["sampleComp"][sample1][sample2]["dist"])
-            sample1_targets.append(distDict["sampleComp"][sample1][sample2]["num_targets"])
+            sample_pair = tuple(sorted([sample1, sample2]))
+            sample1_dist.append(distDict["sampleComp"][sample_pair]["dist"])
+            sample1_targets.append(distDict["sampleComp"][sample_pair]["num_targets"])
         distMatrix.append(sample1_dist)
         targetMatrix.append(sample1_targets)
     if bootstrap is False: #Only output statistics for distance and number targets shared if for original tree (don't output for bootstrap resampling)
@@ -158,6 +156,7 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
     '''
 
     sampleDict = import_sampleDict(sample_info)
+    sample_list = sorted(sampleDict.keys()) #We want to create a list containing all sample_name (for original tree prior to bootstrapping)
 
     targetDict = import_targetDict(target_info)
 
@@ -165,9 +164,21 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
     alleleDict = pickle.load(open(alleleDict_file, 'rb'))
     alleleDict = calcBulk(alleleDict, targetDict)
 
+    #Pre-calculate shared targets between each sample
+    sharedDict = {} #Contains all shared targets between each pairwise sample
+    for sample1 in sorted(sample_list):
+        for sample2 in sorted(sample_list):
+            sample_pair = tuple(sorted([sample1,sample2]))
+            if sample_pair not in sharedDict.keys():
+                shared_targets = []
+                for target_id in sorted(alleleDict.keys()):
+                    if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys():
+                        if "allelotype" in alleleDict[target_id]["sample"][sample1].keys() and "allelotype" in alleleDict[target_id]["sample"][sample2].keys():
+                            shared_targets.append(target_id)
+                sharedDict[sample_pair] = shared_targets
+
     #Calculate original tree using all samples found within sampleDict
-    sample_list = sorted(sampleDict.keys()) #We want to create a list containing all sample_name (for original tree prior to bootstrapping)
-    distDict_original = makeDistMatrix(sample_list, alleleDict, dist_metric) #Calculate pairwise distance between each sample
+    distDict_original = makeDistMatrix(sample_list, sharedDict, alleleDict, dist_metric) #Calculate pairwise distance between each sample
     tree_original = drawTree(distDict_original, sample_list, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
     f_tree = open(prefix + '.buildPhylo.newick.txt', 'a')
     f_tree.write("-----Original Tree without Support Values-----\n")
@@ -187,8 +198,10 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
             # nodeDict[tuple(sorted(leaf_list))]["NodeID"] = node.write(format = 9)
         for i in tqdm(range(10000)): #Bootstrap resample 10,000 times
             #Random downsample from pool of available targets (target_list) to use for distance calculation
-            sample_list = sorted(set(np.random.choice(list(sampleDict.keys()), len(sampleDict.keys()), replace=True)))
-            distDict_temp = makeDistMatrix(sample_list, alleleDict, dist_metric)
+            sample_list = set(np.random.choice(list(sampleDict.keys()), len(sampleDict.keys()), replace=True))
+            if outgroup not in ["Midpoint", "NA"]: #We want to make sure our outgroup remains in the tree even during bootstraping
+                sample_list.add(outgroup)
+            distDict_temp = makeDistMatrix(sample_list, sharedDict, alleleDict, dist_metric)
             tree_temp = drawTree(distDict_temp, sample_list, outgroup, prefix, bootstrap)
             nodeDict = bootstrapTree(nodeDict, tree_temp, sample_list) #Determine whether each node in original tree is found in tree_temp
         #Add support information to original tree
