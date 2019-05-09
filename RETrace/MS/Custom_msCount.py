@@ -110,9 +110,9 @@ def counter(read_list, targetDict, target_id):
     print("Analyzing:\t" + target_id)
     msCount_list = []
     for read in read_list:
-        # if targetDict[target_id]["up_seq"][-10:] in read and targetDict[target_id]["down_seq"][:10] in read: #Speed up processing by simple alignment if exact match to portion of up/down-seq
-        #     msCount_list.append(read + "=" + str(simple_counter(read, targetDict, target_id)))
-        # else:
+        if targetDict[target_id]["up_seq"][-10:] in read and targetDict[target_id]["down_seq"][:10] in read: #Speed up processing by simple alignment if exact match to portion of up/down-seq
+            msCount_list.append(read + "=" + str(simple_counter(read, targetDict, target_id)))
+        else:
             msCount_list.append(read + "=" + str(aln_counter(read, targetDict, target_id))) #Save both read sequence and msCount
     return msCount_list
 
