@@ -53,7 +53,7 @@ def plotTriplets(tripletDict, prefix):
 
     #Write correct triplet rate into text file
     f_output = open(prefix + ".evalPhylo.txt", 'w')
-    f_output.write("\n".join([str(dist_list[i]) + "\t" + str(corr_list[i]) for i in range(len(dist_list))]) + "\n"))
+    f_output.write("\n".join([str(dist_list[i]) + "\t" + str(corr_list[i]) for i in range(len(dist_list))]) + "\n")
     f_output.close()
 
     return errorDict
