@@ -148,7 +148,7 @@ def add_Custom_allelotype_subparser(subparsers):
         dest="min_ratio",
         default=0.2,
         type=float,
-        help="Specify minimum percentae of reads supporting the resulting allelotype")
+        help="Specify minimum percentage of reads supporting the resulting allelotype")
 
 def add_merge_allelotype_subparser(subparsers):
     # create the parser for "merge_allelotype" command

@@ -15,35 +15,36 @@ def make_stutter(sampleDict, targetDict, alleleDict, prefix):
     for target_id in sorted(alleleDict.keys()):
         if "chrX" in target_id or "chrY" in target_id: #We only want to calculate stutter from sex chromosomes
             for sample in sorted(alleleDict[target_id]["sample"].keys()):
-                if sampleDict[sample]["sex"] == "M": #Only rely on hemizygous sex chromosomes in male samples
-                    #We want to calculate the num_modal, num_error, xbar, and num_increase for each sample/target_id
-                    sub_len = len(targetDict[target_id]["sub_seq"])
-                    stutter_key = sub_len #Define stutter_key as sub_len (may use sub_seq in future for more detailed stutter model)
-                    modal_msCount = Counter(alleleDict[target_id]["sample"][sample]["msCount"]).most_common(1)[0][0] #Modal msCount for given target_id/sample (<https://stackoverflow.com/questions/10797819/finding-the-mode-of-a-list>)
-                    num_modal = alleleDict[target_id]["sample"][sample]["msCount"].count(modal_msCount)
-                    num_error = len(alleleDict[target_id]["sample"][sample]["msCount"]) - num_modal
-                    xbar = 0
-                    num_increase = 0
-                    for msCount in set(alleleDict[target_id]["sample"][sample]["msCount"]):
-                        deviation = msCount - modal_msCount #This is the base difference from modal allele
-                        xbar += (deviation % sub_len) * alleleDict[target_id]["sample"][sample]["msCount"].count(msCount) #This keeps track of the number of non-unit deviations from modal count
-                        if deviation > 0:
-                            num_increase += alleleDict[target_id]["sample"][sample]["msCount"].count(msCount)
-                    #Save num_modal, num_error, xbar, and num_increase to stutterDict
-                    if stutter_key not in stutterDict.keys():
-                        stutterDict[stutter_key] = {}
-                    if sample not in stutterDict[stutter_key].keys():
-                        stutterDict[stutter_key][sample] = {}
-                        stutterDict[stutter_key][sample]["num_modal"] = num_modal
-                        stutterDict[stutter_key][sample]["num_error"] = num_error
-                        stutterDict[stutter_key][sample]["xbar"] = xbar
-                        stutterDict[stutter_key][sample]["num_increase"] = num_increase
-                        stutterDict[stutter_key][sample]["sub_len"] = sub_len
-                    else:
-                        stutterDict[stutter_key][sample]["num_modal"] += num_modal
-                        stutterDict[stutter_key][sample]["num_error"] += num_error
-                        stutterDict[stutter_key][sample]["xbar"] += xbar
-                        stutterDict[stutter_key][sample]["num_increase"] += num_increase
+                if sample in sampleDict.keys(): #We want to limit our analysis to only samples specified in sampleDict
+                    if sampleDict[sample]["sex"] == "M": #Only rely on hemizygous sex chromosomes in male samples
+                        #We want to calculate the num_modal, num_error, xbar, and num_increase for each sample/target_id
+                        sub_len = len(targetDict[target_id]["sub_seq"])
+                        stutter_key = sub_len #Define stutter_key as sub_len (may use sub_seq in future for more detailed stutter model)
+                        modal_msCount = Counter(alleleDict[target_id]["sample"][sample]["msCount"]).most_common(1)[0][0] #Modal msCount for given target_id/sample (<https://stackoverflow.com/questions/10797819/finding-the-mode-of-a-list>)
+                        num_modal = alleleDict[target_id]["sample"][sample]["msCount"].count(modal_msCount)
+                        num_error = len(alleleDict[target_id]["sample"][sample]["msCount"]) - num_modal
+                        xbar = 0
+                        num_increase = 0
+                        for msCount in set(alleleDict[target_id]["sample"][sample]["msCount"]):
+                            deviation = msCount - modal_msCount #This is the base difference from modal allele
+                            xbar += (deviation % sub_len) * alleleDict[target_id]["sample"][sample]["msCount"].count(msCount) #This keeps track of the number of non-unit deviations from modal count
+                            if deviation > 0:
+                                num_increase += alleleDict[target_id]["sample"][sample]["msCount"].count(msCount)
+                        #Save num_modal, num_error, xbar, and num_increase to stutterDict
+                        if stutter_key not in stutterDict.keys():
+                            stutterDict[stutter_key] = {}
+                        if sample not in stutterDict[stutter_key].keys():
+                            stutterDict[stutter_key][sample] = {}
+                            stutterDict[stutter_key][sample]["num_modal"] = num_modal
+                            stutterDict[stutter_key][sample]["num_error"] = num_error
+                            stutterDict[stutter_key][sample]["xbar"] = xbar
+                            stutterDict[stutter_key][sample]["num_increase"] = num_increase
+                            stutterDict[stutter_key][sample]["sub_len"] = sub_len
+                        else:
+                            stutterDict[stutter_key][sample]["num_modal"] += num_modal
+                            stutterDict[stutter_key][sample]["num_error"] += num_error
+                            stutterDict[stutter_key][sample]["xbar"] += xbar
+                            stutterDict[stutter_key][sample]["num_increase"] += num_increase
     #We want to do bootstrap resampling across all samples for each stutter_key in order to more accurately calculate stutter
     #We first initialize the necessary lists for storing the various stutter parameters from each bootstrap resampling
     for stutter_key in sorted(stutterDict.keys()):
@@ -124,60 +125,62 @@ def calcProb(e, stutterDict, sub_len): #This subroutine will calculate teh proba
 def calcLogLike(alleleA, alleleB, msCount_list, stutterDict, sub_len): #We want to calculate the log likelihood of a given allelotype A/B
     logLike = 0
     for msCount in sorted(msCount_list):
-        probA = calcProb(msCount - alleleA, stutterDict, sub_len)
-        probB = calcProb(msCount - alleleB, stutterDict, sub_len)
-        logLike += math.log10(max(probA, probB)) #We want the log10 of max(probA, probB)
+        if abs(msCount - alleleA) <= 100 and abs(msCount - alleleB) <= 100: #We only want to consider msCounts that are within reasonable bp differences from reference (cutoff of 100bp diff)
+            probA = calcProb(msCount - alleleA, stutterDict, sub_len)
+            probB = calcProb(msCount - alleleB, stutterDict, sub_len)
+            logLike += math.log10(max(probA, probB)) #We want the log10 of max(probA, probB)
     return logLike
 
 def stutter_typing(sampleDict, targetDict, alleleDict, stutterDict, min_cov, min_ratio):
     for target_id in tqdm(sorted(alleleDict.keys())):
         for sample in sorted(alleleDict[target_id]["sample"]):
-            msCount_list = alleleDict[target_id]["sample"][sample]["msCount"]
-            if len(msCount_list) < min_cov:
-                continue
-            #Gather msCount frequency into msCount_dict where keys are microsatellite count and values are the number of times they occur
-            msCount_dict = dict(Counter(msCount_list))
-            logLikeDict = {} #We want to save all log likelihoods for allelotypes into dictionary
-            likeDict = {} #We want to save all likelihoods into dictionary
-            alleleLikeDict = {} #We want to save allele marginal likelihoods
-            #We want to perform peak calling in order to determine most possible msCounts that could be alleles.  This is because we do not want to consider msCounts that are not local-maxima of count frequency, which most likely is not allele
-            all_msCount = [] #List of all integer number subunits in msCount range for given sample
-            msCount_freq = [] #List of number of reads for each of the above msCount in all_msCount
-            for msCount in range(min(msCount_list), max(msCount_list) + 1):
-                if msCount % len(targetDict[target_id]["sub_seq"]) == 0:
-                    all_msCount.append(msCount)
-                    if msCount in msCount_dict.keys():
-                        msCount_freq.append(msCount_dict[msCount])
-                    else:
-                        msCount_freq.append(0)
-                        msCount_dict[msCount] = 0
-            if len(all_msCount) > 2:
-                #We want to perform peak-calling on mscount and return the respective msCount call (possible allelotype) for each peak index
-                allele_indx = peakutils.indexes(msCount_freq)
-            else: #If number of msCounts is <= 2, we want to consider all given msCount as possible alleles
-                allele_indx = range(len(all_msCount))
-            possible_alleles = [all_msCount[indx] for indx in allele_indx]
-            #We now want to calculate which of the possible_alleles is the most likely allelotype for given target/sample given all msCount
-            for alleleA in sorted(possible_alleles):
-                if alleleA not in alleleLikeDict.keys():
-                    alleleLikeDict[alleleA] = 0
-                for alleleB in sorted(possible_alleles):
-                    if alleleB not in alleleLikeDict.keys():
-                        alleleLikeDict[alleleB] = 0
-                    if alleleB < alleleA:
-                        continue #We do not want to repeat analysis on a poential allelelotype
-                    elif alleleA == alleleB:
-                        read_cov = msCount_dict[alleleA] #We want to keep track of the number of reads that support allelotype
-                    else:
-                        read_cov = msCount_dict[alleleA] + msCount_dict[alleleB]
-                        if ("chrX" in target_id and sampleDict[sample]["sex"] == 'M') or ("chrY" in target_id and sampleDict[sample]["sex"] == 'M'):
-                            continue #We only want to consider homozygous allelotypes if we are looking at male hemizygous sex chromosomes
-                    if read_cov >= (min_ratio * len(msCount_list)): #We want to set a cutoff of the minimum ratio of total reads supporting the resulting allelotypes to min_ratio
-                        like_key = '/'.join(str(allele) for allele in sorted([alleleA, alleleB]))
-                        logLikeDict[like_key] = calcLogLike(alleleA, alleleB, msCount_list, stutterDict, len(targetDict[target_id]["sub_seq"]))
-            if sum(logLikeDict.values()) != 0:
-                allelotype = max(logLikeDict, key = logLikeDict.get)
-                alleleDict[target_id]["sample"][sample]["allelotype"] = list(map(int, allelotype.split('/')))
+            if sample in sampleDict.keys(): #We only want to calculate allelotype from sex chromosomes
+                msCount_list = alleleDict[target_id]["sample"][sample]["msCount"]
+                if len(msCount_list) < min_cov:
+                    continue
+                #Gather msCount frequency into msCount_dict where keys are microsatellite count and values are the number of times they occur
+                msCount_dict = dict(Counter(msCount_list))
+                logLikeDict = {} #We want to save all log likelihoods for allelotypes into dictionary
+                likeDict = {} #We want to save all likelihoods into dictionary
+                alleleLikeDict = {} #We want to save allele marginal likelihoods
+                #We want to perform peak calling in order to determine most possible msCounts that could be alleles.  This is because we do not want to consider msCounts that are not local-maxima of count frequency, which most likely is not allele
+                all_msCount = [] #List of all integer number subunits in msCount range for given sample
+                msCount_freq = [] #List of number of reads for each of the above msCount in all_msCount
+                for msCount in range(min(msCount_list), max(msCount_list) + 1):
+                    if msCount % len(targetDict[target_id]["sub_seq"]) == 0:
+                        all_msCount.append(msCount)
+                        if msCount in msCount_dict.keys():
+                            msCount_freq.append(msCount_dict[msCount])
+                        else:
+                            msCount_freq.append(0)
+                            msCount_dict[msCount] = 0
+                if len(all_msCount) > 2:
+                    #We want to perform peak-calling on mscount and return the respective msCount call (possible allelotype) for each peak index
+                    allele_indx = peakutils.indexes(msCount_freq)
+                else: #If number of msCounts is <= 2, we want to consider all given msCount as possible alleles
+                    allele_indx = range(len(all_msCount))
+                possible_alleles = [all_msCount[indx] for indx in allele_indx]
+                #We now want to calculate which of the possible_alleles is the most likely allelotype for given target/sample given all msCount
+                for alleleA in sorted(possible_alleles):
+                    if alleleA not in alleleLikeDict.keys():
+                        alleleLikeDict[alleleA] = 0
+                    for alleleB in sorted(possible_alleles):
+                        if alleleB not in alleleLikeDict.keys():
+                            alleleLikeDict[alleleB] = 0
+                        if alleleB < alleleA:
+                            continue #We do not want to repeat analysis on a poential allelelotype
+                        elif alleleA == alleleB:
+                            read_cov = msCount_dict[alleleA] #We want to keep track of the number of reads that support allelotype
+                        else:
+                            read_cov = msCount_dict[alleleA] + msCount_dict[alleleB]
+                            if ("chrX" in target_id and sampleDict[sample]["sex"] == 'M') or ("chrY" in target_id and sampleDict[sample]["sex"] == 'M'):
+                                continue #We only want to consider homozygous allelotypes if we are looking at male hemizygous sex chromosomes
+                        if read_cov >= (min_ratio * len(msCount_list)): #We want to set a cutoff of the minimum ratio of total reads supporting the resulting allelotypes to min_ratio
+                            like_key = '/'.join(str(allele) for allele in sorted([alleleA, alleleB]))
+                            logLikeDict[like_key] = calcLogLike(alleleA, alleleB, msCount_list, stutterDict, len(targetDict[target_id]["sub_seq"]))
+                if sum(logLikeDict.values()) != 0:
+                    allelotype = max(logLikeDict, key = logLikeDict.get)
+                    alleleDict[target_id]["sample"][sample]["allelotype"] = list(map(int, allelotype.split('/')))
     return alleleDict
 
 def allelotype(sampleDict, prefix, targetDict, alleleDict, min_cov, min_ratio):

@@ -13,16 +13,17 @@ def calcBulk(alleleDict, targetDict):
     Cluster all alleles belonging to given target across all sample.  Use these as possible "allele_groups"
     '''
     for target_id in sorted(alleleDict.keys()):
-        sub_len = len(targetDict[target_id]["sub_seq"])
-        all_alleles = set()
-        for sample in sorted(alleleDict[target_id]["sample"].keys()):
-            try:
-                all_alleles.update([int(allele/sub_len) for allele in alleleDict[target_id]["sample"][sample]["allelotype"]]) #Convert alleles to number of subunits (because we want to group all consecutive integer number subunit alleles)
-            except:
-                continue
-        alleleDict[target_id]["allele_groups"] = {}
-        for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(all_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
-            alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref
+        if target_id in targetDict.keys(): #We only want to analyze target_id specified in targetDict
+            sub_len = len(targetDict[target_id]["sub_seq"])
+            all_alleles = set()
+            for sample in sorted(alleleDict[target_id]["sample"].keys()):
+                try:
+                    all_alleles.update([int(allele/sub_len) for allele in alleleDict[target_id]["sample"][sample]["allelotype"]]) #Convert alleles to number of subunits (because we want to group all consecutive integer number subunit alleles)
+                except:
+                    continue
+            alleleDict[target_id]["allele_groups"] = {}
+            for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(all_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
+                alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref
     return alleleDict
 
 def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets, dist_metric):
@@ -172,7 +173,7 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
             if sample_pair not in sharedDict.keys():
                 shared_targets = []
                 for target_id in sorted(alleleDict.keys()):
-                    if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys():
+                    if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys() and target_id in targetDict.keys(): #Only want to analyze target_id in targetDict
                         if "allelotype" in alleleDict[target_id]["sample"][sample1].keys() and "allelotype" in alleleDict[target_id]["sample"][sample2].keys():
                             shared_targets.append(target_id)
                 sharedDict[sample_pair] = shared_targets
@@ -180,10 +181,10 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
     #Calculate original tree using all samples found within sampleDict
     distDict_original = makeDistMatrix(sample_list, sharedDict, alleleDict, dist_metric) #Calculate pairwise distance between each sample
     tree_original = drawTree(distDict_original, sample_list, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
-    f_tree = open(prefix + '.buildPhylo.newick.txt', 'a')
-    f_tree.write("-----Original Tree without Support Values-----\n")
-    f_tree.write(tree_original.write(format = 0))
-    f_tree.write("\n")
+    f_tree_original = open(prefix + '.buildPhylo.newick-original.txt', 'w')
+    f_tree_original.write(tree_original.write(format = 0))
+    f_tree_original.write("\n")
+    f_tree_original.close()
     #Bootstrap resample to create new distance matrices/trees and add support values to internal nodes of original tree
     if bootstrap is True:
         #Determine dictionary of tree nodes from tree_original
@@ -215,7 +216,7 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
                 node_support = 2.0 #Assign nodes that were not present in any bootstrap simulation a value of 2.0
             node.add_features(support = node_support)
         #Output tree with optional support values
-        f_tree.write("-----Original Tree with Support Values-----\n")
-        f_tree.write(tree_original.write(format = 0))
-        f_tree.write("\n")
-    f_tree.close()
+        f_tree_bootstrap = open(prefix + '.buildPhylo.newick-bootstrap.txt', 'w')
+        f_tree_bootstrap.write(tree_original.write(format = 0))
+        f_tree_bootstrap.write("\n")
+        f_tree_bootstrap.close()
