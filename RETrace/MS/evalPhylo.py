@@ -8,6 +8,7 @@ matplotlib.use('Agg')
 import seaborn as sns
 import multiprocessing
 import random
+import pickle
 manager = multiprocessing.Manager()
 
 def multi_calcTriplets(triplet_group, NJTree, exvivo_pd, sampleDict, tripletDict):
@@ -26,16 +27,23 @@ def multi_calcTriplets(triplet_group, NJTree, exvivo_pd, sampleDict, tripletDict
             tripletDict[triplet] = str(max(ref_dist)) + ",0"
     return
 
-def plotTriplets(tripletDict, prefix):
+def calc_tripletAccuracy(tripletDict, sampleDict, prefix):
     errorDict = {}
     for triplet in tqdm(sorted(tripletDict.keys())):
         (ref_dist, correct_bool) = tripletDict[triplet].split(',')
-        if ref_dist not in errorDict.keys():
-            errorDict[ref_dist] = {}
-            errorDict[ref_dist]["Correct"] = 0
-            errorDict[ref_dist]["Total"] = 0
-        errorDict[ref_dist]["Correct"] += int(correct_bool)
-        errorDict[ref_dist]["Total"] += 1
+        if int(ref_dist) != 0: #We want to ignore ref_dist of 0, meaning that either pair of triplet could potentially be closest to MRCA
+            if ref_dist not in errorDict.keys():
+                errorDict[ref_dist] = {}
+                errorDict[ref_dist]["Correct"] = 0
+                errorDict[ref_dist]["Total"] = 0
+            errorDict[ref_dist]["Correct"] += int(correct_bool)
+            errorDict[ref_dist]["Total"] += 1
+            for sample in triplet: #We want to keep track of the number of times the given sample was captured in a triplet and how many times this was a correct triplet
+                if "numTriplet" not in sampleDict[sample].keys():
+                    sampleDict[sample]["numTriplet"] = 0
+                    sampleDict[sample]["corrTriplet"] = 0
+                sampleDict[sample]["numTriplet"] += 1
+                sampleDict[sample]["corrTriplet"] += int(correct_bool)
     #Plot propotion of correct triplets per distance metric
     dist_list = sorted(errorDict.keys())
     corr_list = []
@@ -56,15 +64,34 @@ def plotTriplets(tripletDict, prefix):
     f_output.write("\n".join([str(dist_list[i]) + "\t" + str(corr_list[i]) for i in range(len(dist_list))]) + "\n")
     f_output.close()
 
-    return errorDict
+    return sampleDict
 
-def evalPhylo(sample_info, prefix, exVivo_dist, tree_file, nproc):
+def calc_targetStats(sampleDict, alleleDict, prefix):
+    #We first want to reformat alleleDict into sampleDict in order to have a simple list of num_reads for each target
+    for target_id in sorted(alleleDict.keys()):
+        for sample in sorted(alleleDict[target_id]["sample"].keys()):
+            if "msCount_list" not in sampleDict[sample].keys():
+                sampleDict[sample]["msCount_list"] = []
+            sampleDict[sample]["msCount_list"].append(len(alleleDict[target_id]["sample"][sample]["msCount"]))
+    sampleAccuracy = {}
+    for sample in sorted(sampleDict.keys()):
+        corr_rate = float(sampleDict[sample]["corrTriplet"] / sampleDict[sample]["numTriplet"])
+        sampleAccuracy[sample] = [round(corr_rate,3)]
+        for min_reads in range(0, 501, 20): #We want to set num_reads cutoff for 0-500
+            num_targets = len([num_reads for num_reads in sampleDict[sample]["msCount_list"] if num_reads >= min_reads])
+            sampleAccuracy[sample].append(int(num_targets))
+    sampleAccuracy_df = pd.DataFrame(sampleAccuracy, index = ["Accuracy"] + list(range(0, 501, 20)))
+    sampleAccuracy_df.to_csv(prefix + ".targetStats.txt", sep="\t")
+    return
+
+def evalPhylo(sample_info, alleleDict_file, prefix, exVivo_dist, tree_file, nproc):
     '''
     This script is made specifically for our known ex vivo HCT116 tree.  It will be used to determine the accuracy of any phylogenetic tree we calculate.  To do this, we need to input the following files:
         1) sample_info = tab-delimited file containing file location of sample bam, sample name [same as leaves in tree file], sex, and sample type (i.e. clone in ex vivo tree [2-1-G10_3-1-A2, 2-1-H7_3-6-C6, 2-1-G10_3-1-B1, 2-2-B1_3-2-A6])
-        2) exVivo_dist = csv file containing MRCA distance from root, as approximated in units of cell divisions
-        2) newick_tree = file containing Newick tree output
-        3) prefix = output prefix for error calculation statistics comparing calculated Newick tree to given ex vivo tree
+        2) alleleDict = dictionary containing all allele/msCount for each sample per target_id
+        3) exVivo_dist = csv file containing MRCA distance from root, as approximated in units of cell divisions
+        4) newick_tree = file containing Newick tree output
+        5) prefix = output prefix for error calculation statistics comparing calculated Newick tree to given ex vivo tree
     We will then use the above input to calculate an errorDict which contains the following structure:
         errorDict
             cell_div = reference cell division difference between nodes (ex: [2-1-G10_3-1-A2, 2-1-G10_3-1-B1, 2-2-B1_3-2-A6] = abs(max()))
@@ -108,9 +135,23 @@ def evalPhylo(sample_info, prefix, exVivo_dist, tree_file, nproc):
     for p in jobs:
         p.join()
 
-    #Plot number of correct triplets
+    #Plot percentage of correct triplets
     print("Plotting/printing correct triplet rate")
-    plotTriplets(tripletDict, prefix)
+    sampleDict = calc_tripletAccuracy(tripletDict, sampleDict, prefix)
+
+    #We want to calculate target sequencing depth per sample based on sample accuracy
+    '''The structure of alleleDict is as follows:
+        alleleDict
+            target_id (from targetDict)
+                "sample"
+                    sample (from sampleDict, which is already defined when labeling readGroups prior to HipSTR)
+                        "msCount"
+                            list of msCounts
+                        "allelotype"
+                            list of alleles (2 alleles)
+    '''
+    alleleDict = pickle.load(open(alleleDict_file, 'rb'))
+    calc_targetStats(sampleDict, alleleDict, prefix)
 
 if __name__ == "__main__":
     main()

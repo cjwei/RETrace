@@ -97,6 +97,8 @@ def drawTree(distDict, sample_list, outgroup, prefix, bootstrap):
     '''
     distMatrix = []
     targetMatrix = []
+    pairwise_numTargets = []
+    sc_numTargets = []
     for sample1 in sorted(sample_list):
         sample1_dist = []
         sample1_targets = []
@@ -106,8 +108,14 @@ def drawTree(distDict, sample_list, outgroup, prefix, bootstrap):
             sample1_targets.append(distDict["sampleComp"][sample_pair]["num_targets"])
         distMatrix.append(sample1_dist)
         targetMatrix.append(sample1_targets)
+        if sample1 != sample2:
+            pairwise_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
+        else:
+            sc_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
     if bootstrap is False: #Only output statistics for distance and number targets shared if for original tree (don't output for bootstrap resampling)
         statsOutput = open(prefix + ".buildPhylo.stats.txt", 'w')
+        statsOutput.write("Avg targets shared per pair of cells:\t" + str(float(sum(pairwise_numTargets) / len(pairwise_numTargets))) + "\n")
+        statsOutput.write("Avg targets captured per single cell:\t" + str(float(sum(sc_numTargets) / len(sc_numTargets))) + "\n")
         for dist_indx,dist_list in enumerate(distMatrix): #Print matrix containing distances
             statsOutput.write(sorted(sample_list)[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
         for target_indx,target_list in enumerate(targetMatrix): #Print matrix containing number targets shared between each pair

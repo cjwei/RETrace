@@ -45,6 +45,8 @@ def parseVCF(sampleDict, targetDict, prefix, min_qual, min_reads, max_stutter):
     '''
     print("Extracting allelotype from HipSTR output")
     alleleDict = {}
+    f_goodTargets = open(prefix + ".goodTargets.txt", "w") #This file contains all targets that we kept for alleleDict and subsequent buildPhylo
+    f_badTargets = open(prefix + ".badTargets.txt", "w") #This file will contain all the targets thrown out during filtering
     with open(prefix + ".HipSTR.vcf") as vcf:
         for line in vcf:
             if not line.startswith('##'):
@@ -77,6 +79,11 @@ def parseVCF(sampleDict, targetDict, prefix, min_qual, min_reads, max_stutter):
                                     [msCount, freq] = msCount_info.split('|')
                                     alleleDict[target_id]["sample"][sample]["msCount"].extend([int(msCount)] * int(freq))
                                 alleleDict[target_id]["sample"][sample]["allelotype"] = [int(allele) + ref_MS_len for allele in allelotype.split('|')]
+                                f_goodTargets.write(target_id + "\t" + sample + "\t" + "\t".join([allelotype, prob_genotype, num_reads, num_stutter, msCounts]) + "\n")
+                            else: #We want to print out all targets that are thrown out during filtering
+                                f_badTargets.write(target_id + "\t" + sample + "\t" + "\t".join([allelotype, prob_genotype, num_reads, num_stutter, msCounts]) + "\n")
+    f_goodTargets.close()
+    f_badTargets.close()
     return alleleDict
 
 def HipSTR_allelotype(sample_info, prefix,

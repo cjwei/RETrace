@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import RETrace.MS
+import RETrace.Methyl
 import sys
 
 def parse_args():
@@ -9,11 +10,21 @@ def parse_args():
 
     subparsers = parser.add_subparsers(title="functions", dest="command", metavar="")
 
+    '''
+    MS subparsers
+    '''
     add_HipSTR_allelotype_subparser(subparsers)
     add_Custom_allelotype_subparser(subparsers)
     add_merge_allelotype_subparser(subparsers)
     add_buildPhylo_subparser(subparsers)
     add_evalPhylo_subparser(subparsers)
+
+    '''
+    Methyl subparsers
+    '''
+    add_importMethyl_subparser(subparsers)
+    add_refPD_subparser(subparsers)
+    add_methRate_subparser(subparsers)
 
     if len(sys.argv) > 1:
         args = parser.parse_args()
@@ -44,7 +55,19 @@ def parse_args():
 
     elif args.command == "evalPhylo":
         from RETrace.MS.evalPhylo import evalPhylo
-        evalPhylo(args.sample_info, args.prefix, args.exVivo_dist, args.tree_file, args.nproc)
+        evalPhylo(args.sample_info, args.alleleDict_file, args.prefix, args.exVivo_dist, args.tree_file, args.nproc)
+
+    elif args.command == "importMethyl":
+        from RETrace.Methyl.importMethyl import importMethyl
+        importMethyl(args.sample_info, args.prefix, args.ref_CGI)
+
+    elif args.command == "refPD":
+        from RETrace.Methyl.refPD import refPD
+        refPD(args.sample_list, args.ref_info, args.sample_methDict, args.prefix, args.DMR, args.min_shared, args.min_rate)
+
+    elif args.command == "pairwise_methRate":
+        from RETrace.Methyl.pairwise_methRate import pairwise_methRate
+        pairwise_methRate(args.sample_list, args.sample_methDict, args.Ensemble_gff, args.prefix)
 
 def add_HipSTR_allelotype_subparser(subparsers):
     # create the parser for "HipSTR_allelotype" command
@@ -220,6 +243,10 @@ def add_evalPhylo_subparser(subparsers):
         action="store",
         dest="sample_info",
         help="Tab-delimited file containing sample information (bam, sample_name, sex, [optional] clone)")
+    parser_evalPhylo_req.add_argument("--alleleDict",
+        action="store",
+        dest="alleleDict_file",
+        help="Pickle file containing alleleDict calculated from either HipSTR_allelotype or Custom_allelotype")
     parser_evalPhylo_req.add_argument("--exVivo",
         action="store",
         dest="exVivo_dist",
@@ -239,3 +266,93 @@ def add_evalPhylo_subparser(subparsers):
         default=10,
         type=int,
         help="Specify number of processors for evaluating accuracy of tree")
+
+def add_importMethyl_subparser(subparsers):
+    # create the parser for "importMethyl" command
+    parser_importMethyl = subparsers.add_parser(
+        "importMethyl",
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+        help = "Import methylation calls derived from methylpy TSV files for samples/cell type ref (make sure to run methylpy prior to import)")
+
+    parser_importMethyl_req = parser_importMethyl.add_argument_group("required inputs")
+    parser_importMethyl_req.add_argument("--sample_info",
+        action="store",
+        dest="sample_info",
+        help="Tab-delimited file containing the sample/cell type tsv files/locations along with sample/cell type names")
+    parser_importMethyl_req.add_argument("--prefix",
+        action="store",
+        dest="prefix",
+        help="Prefix name for exporting methDict and coverage statistics information")
+    parser_importMethyl_req.add_argument("--ref_CGI",
+        action="store",
+        dest="ref_CGI",
+        help="Bed file containing reference genome CGI locations")
+
+def add_refPD_subparser(subparsers):
+    # create the parser for "refPD" command
+    parser_refPD = subparsers.add_parser(
+        "refPD",
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+        help = "Calculate and plot pairwise dissimilarity between single cells and reference cell types")
+
+    parser_refPD_req = parser_refPD.add_argument_group("required inputs")
+    parser_refPD_req.add_argument("--sample_list",
+        action="store",
+        dest="sample_list",
+        help="File containing sample names to be included in PD calculations (one sample per line)")
+    parser_refPD_req.add_argument("--ref_info",
+        action="store",
+        dest="ref_info",
+        help="Tab-delmited file containing the cell type tsv files/locations along with cell type names")
+    parser_refPD_req.add_argument("--sample_methDict",
+        action="store",
+        dest="sample_methDict",
+        help="Pre-computed methDict pickle file containing sample information and methylation calls")
+    parser_refPD_req.add_argument("--prefix",
+        action="store",
+        dest="prefix",
+        help="Prefix name for exporting calPD output")
+
+    parser_refPD_opt = parser_refPD.add_argument_group("optional inputs")
+    parser_refPD_opt.add_argument("-DMR",
+        action="store_true",
+        dest="DMR",
+        default=False,
+        help="Flag to constrain bases of interest in refernce file to DMR regions")
+    parser_refPD_opt.add_argument("--min_shared",
+        action="store",
+        dest="min_shared",
+        default=100,
+        type=int,
+        help="Minimum number of CpG sites shared between each sample and cell type comparison")
+    parser_refPD_opt.add_argument("--min_rate",
+        action="store",
+        dest="min_rate",
+        default=0.5,
+        type=float,
+        help="Minimum methylated or unmethylated rate for cellType reference for filtering confident methyl calls (0.5 = no filtering; 1 = only perfect call)")
+
+def add_methRate_subparser(subparsers):
+    # create the parser for "pairwise_methRate" command
+    parser_methRate = subparsers.add_parser(
+        "pairwise_methRate",
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+        help = "Calculate methRate across Ensembl Regulatory Build windows")
+
+    parser_methRate_req = parser_methRate.add_argument_group("required inputs")
+    parser_methRate_req.add_argument("--sample_list",
+        action="store",
+        dest="sample_list",
+        help="File containing sample names to be included in pairwise methRate calculations (one sample per line)")
+    parser_methRate_req.add_argument("--sample_methDict",
+        action="store",
+        dest="sample_methDict",
+        help="Pre-computed methDict pickle file containing sample information and methylation calls")
+    parser_methRate_req.add_argument("--gff",
+        action="store",
+        dest="Ensemble_gff",
+        help="Gzipped gff file containing Ensembl Regulatory Build windows")
+    parser_methRate_req.add_argument("--prefix",
+        action="store",
+        dest="prefix",
+        help="Prefix name for exporting pairwise methRate csv output")
