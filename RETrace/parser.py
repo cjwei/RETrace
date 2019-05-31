@@ -34,7 +34,7 @@ def parse_args():
 
     if args.command == "HipSTR_allelotype":
         from RETrace.MS.HipSTR import HipSTR_allelotype
-        HipSTR_allelotype(args.sample_info, args.prefix,
+        HipSTR_allelotype(args.sample_info, args.HipSTR_vcf, args.prefix,
             args.fasta_loc, args.picard_loc, args.HipSTR_loc,
             args.target_bed, args.target_info,
             args.min_qual, args.min_reads, args.max_stutter)
@@ -50,12 +50,12 @@ def parse_args():
 
     elif args.command == "buildPhylo":
         from RETrace.MS.buildPhylo import buildPhylo
-        buildPhylo(args.sample_info, args.prefix, args.target_info,
+        buildPhylo(args.sample_list, args.prefix, args.target_info,
             args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap)
 
     elif args.command == "evalPhylo":
         from RETrace.MS.evalPhylo import evalPhylo
-        evalPhylo(args.sample_info, args.alleleDict_file, args.prefix, args.exVivo_dist, args.tree_file, args.nproc)
+        evalPhylo(args.sample_info, args.sample_list, args.alleleDict_file, args.prefix, args.exVivo_dist, args.tree_file, args.nproc)
 
     elif args.command == "importMethyl":
         from RETrace.Methyl.importMethyl import importMethyl
@@ -82,6 +82,10 @@ def add_HipSTR_allelotype_subparser(subparsers):
         action="store",
         dest="sample_info",
         help="Tab-delimited file containing sample information (bam, sample_name, sex, [optional] clone)")
+    parser_HipSTR_allelotype_req.add_argument("--HipSTR_vcf",
+        action="store",
+        dest="HipSTR_vcf",
+        help="Name of HipSTR vcf output file")
     parser_HipSTR_allelotype_req.add_argument("--prefix",
         action="store",
         dest="prefix",
@@ -197,10 +201,10 @@ def add_buildPhylo_subparser(subparsers):
         help = "Build phylogenetic tree given allelotype of single cells")
 
     parser_buildPhylo_req = parser_buildPhylo.add_argument_group("required inputs")
-    parser_buildPhylo_req.add_argument("--sample_info",
+    parser_buildPhylo_req.add_argument("--sample_list",
         action="store",
-        dest="sample_info",
-        help="Tab-delimited file containing sample information (bam, sample_name, sex, [optional] clone)")
+        dest="sample_list",
+        help="File containing sample names to be included in calculations (one sample per line)")
     parser_buildPhylo_req.add_argument("--prefix",
         action="store",
         dest="prefix",
@@ -243,6 +247,10 @@ def add_evalPhylo_subparser(subparsers):
         action="store",
         dest="sample_info",
         help="Tab-delimited file containing sample information (bam, sample_name, sex, [optional] clone)")
+    parser_evalPhylo_req.add_argument("--sample_list",
+        action="store",
+        dest="sample_list",
+        help="File containing sample names to be included in calculations (one sample per line)")
     parser_evalPhylo_req.add_argument("--alleleDict",
         action="store",
         dest="alleleDict_file",

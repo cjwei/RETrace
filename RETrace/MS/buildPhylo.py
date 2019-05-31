@@ -68,10 +68,11 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
     distDict["sampleComp"][sample_pair] = {}
     distDict["sampleComp"][sample_pair]["dist"] = float(total_dist/num_alleles)
     distDict["sampleComp"][sample_pair]["num_targets"] = len(shared_targets)
+    distDict["sampleComp"][sample_pair]["num_diff"] = int(total_dist)
 
     return distDict
 
-def makeDistMatrix(sample_list, sharedDict, alleleDict, dist_metric):
+def makeDistMatrix(filtered_samples, sharedDict, alleleDict, dist_metric):
     '''
     Wrapper for calculating distance matrix (saved within distDict), which has the following structure:
         distDict
@@ -84,14 +85,14 @@ def makeDistMatrix(sample_list, sharedDict, alleleDict, dist_metric):
     distDict = {}
     distDict["sampleComp"] = {}
     #Calculate pairwise distance for all samples depending on shared targets (follow order specified in target_list [esp for bootstrapping, which may have duplicates due to sampling w/ replacement])
-    for sample1 in sorted(sample_list):
-        for sample2 in sorted(sample_list):
+    for sample1 in sorted(filtered_samples):
+        for sample2 in sorted(filtered_samples):
             sample_pair = tuple(sorted([sample1,sample2]))
             if sample_pair not in distDict["sampleComp"].keys():
                 distDict = calcDist(alleleDict, distDict, sample_pair, sample1, sample2, sharedDict[sample_pair], dist_metric)
     return distDict
 
-def drawTree(distDict, sample_list, outgroup, prefix, bootstrap):
+def drawTree(distDict, filtered_samples, outgroup, prefix, bootstrap):
     '''
     Run neighbor-joining phylogenetic tree building algorithm on pairwise cell distance (saved in distDict)
     '''
@@ -99,10 +100,10 @@ def drawTree(distDict, sample_list, outgroup, prefix, bootstrap):
     targetMatrix = []
     pairwise_numTargets = []
     sc_numTargets = []
-    for sample1 in sorted(sample_list):
+    for sample1 in sorted(filtered_samples):
         sample1_dist = []
         sample1_targets = []
-        for sample2 in sorted(sample_list):
+        for sample2 in sorted(filtered_samples):
             sample_pair = tuple(sorted([sample1, sample2]))
             sample1_dist.append(distDict["sampleComp"][sample_pair]["dist"])
             sample1_targets.append(distDict["sampleComp"][sample_pair]["num_targets"])
@@ -117,11 +118,12 @@ def drawTree(distDict, sample_list, outgroup, prefix, bootstrap):
         statsOutput.write("Avg targets shared per pair of cells:\t" + str(float(sum(pairwise_numTargets) / len(pairwise_numTargets))) + "\n")
         statsOutput.write("Avg targets captured per single cell:\t" + str(float(sum(sc_numTargets) / len(sc_numTargets))) + "\n")
         for dist_indx,dist_list in enumerate(distMatrix): #Print matrix containing distances
-            statsOutput.write(sorted(sample_list)[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
+            statsOutput.write(sorted(filtered_samples)[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
         for target_indx,target_list in enumerate(targetMatrix): #Print matrix containing number targets shared between each pair
-            statsOutput.write(sorted(sample_list)[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
+            statsOutput.write(sorted(filtered_samples)[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
         statsOutput.close()
-    distObj = DistanceMatrix(distMatrix,sorted(sample_list))
+        pickle.dump(distDict, open(prefix + ".buildPhylo.distDict.pkl", "wb")) #We want to print out the distance information for each single cell pair that was used to buildPhylo (this will be useful for downstream statistics)
+    distObj = DistanceMatrix(distMatrix,sorted(filtered_samples))
     skbio_tree = nj(distObj, result_constructor=str)
     ete_tree = Tree(skbio_tree) #We use skbio to first make a tree from distance matrix then convert to ete tree
     if outgroup is "NA":
@@ -134,10 +136,10 @@ def drawTree(distDict, sample_list, outgroup, prefix, bootstrap):
             ete_tree.set_outgroup(outgroup)
     return ete_tree
 
-def bootstrapTree(nodeDict, treeTemp, sample_list):
+def bootstrapTree(nodeDict, treeTemp, bootstrap_samples):
     '''
     Evaluate whether original node (keys of nodeDict) are found within treeTemp (tree from bootstrapped samples).
-    Be sure to only consider sample_name within sample_list, which may be different than original because of bootstrap resampling
+    Be sure to only consider sample_name within bootstrap_samples, which may be different than original because of bootstrap resampling
     '''
     #We want to create a list containing all nodes found in treeTemp
     tempNodes = set()
@@ -148,14 +150,14 @@ def bootstrapTree(nodeDict, treeTemp, sample_list):
         tempNodes.add(tuple(sorted(set(leaf_list))))
     #We next want to loop through all nodes in the original tree to determine if it is found within bootstrapped tree (disregard sample_names thrown out)
     for node in nodeDict.keys():
-        node_intersect = tuple(sorted(set(node).intersection(sample_list)))
+        node_intersect = tuple(sorted(set(node).intersection(bootstrap_samples)))
         if node_intersect == node:
             nodeDict[node]["Num_sampled"] += 1
             if node_intersect in tempNodes:
                 nodeDict[node]["Num_verified"] += 1
     return nodeDict
 
-def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, outgroup, bootstrap):
+def buildPhylo(sample_list, prefix, target_info, alleleDict_file, dist_metric, outgroup, bootstrap):
     '''
     Draw phylogenetic tree based on calculated allelotype of single cells.  This is done by:
         1) Filtering out only likely alleles by creating a "pseudo"-bulk in which we cluster all single cell alleles together (calcBulk)
@@ -164,8 +166,8 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
         4) Repeating 2-3 but bootstrapping the samples in order to determine the support of each node of the original tree
     '''
 
-    sampleDict = import_sampleDict(sample_info)
-    sample_list = sorted(sampleDict.keys()) #We want to create a list containing all sample_name (for original tree prior to bootstrapping)
+    #Import the samples that we want to keep for buildPhylo
+    filtered_samples = open(sample_list, 'r').read().splitlines()
 
     targetDict = import_targetDict(target_info)
 
@@ -175,8 +177,8 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
 
     #Pre-calculate shared targets between each sample
     sharedDict = {} #Contains all shared targets between each pairwise sample
-    for sample1 in sorted(sample_list):
-        for sample2 in sorted(sample_list):
+    for sample1 in sorted(filtered_samples):
+        for sample2 in sorted(filtered_samples):
             sample_pair = tuple(sorted([sample1,sample2]))
             if sample_pair not in sharedDict.keys():
                 shared_targets = []
@@ -187,8 +189,8 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
                 sharedDict[sample_pair] = shared_targets
 
     #Calculate original tree using all samples found within sampleDict
-    distDict_original = makeDistMatrix(sample_list, sharedDict, alleleDict, dist_metric) #Calculate pairwise distance between each sample
-    tree_original = drawTree(distDict_original, sample_list, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
+    distDict_original = makeDistMatrix(filtered_samples, sharedDict, alleleDict, dist_metric) #Calculate pairwise distance between each sample
+    tree_original = drawTree(distDict_original, filtered_samples, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
     f_tree_original = open(prefix + '.buildPhylo.newick-original.txt', 'w')
     f_tree_original.write(tree_original.write(format = 0))
     f_tree_original.write("\n")
@@ -207,12 +209,12 @@ def buildPhylo(sample_info, prefix, target_info, alleleDict_file, dist_metric, o
             # nodeDict[tuple(sorted(leaf_list))]["NodeID"] = node.write(format = 9)
         for i in tqdm(range(10000)): #Bootstrap resample 10,000 times
             #Random downsample from pool of available targets (target_list) to use for distance calculation
-            sample_list = set(np.random.choice(list(sampleDict.keys()), len(sampleDict.keys()), replace=True))
+            bootstrap_samples = set(np.random.choice(list(sampleDict.keys()), len(sampleDict.keys()), replace=True))
             if outgroup not in ["Midpoint", "NA"]: #We want to make sure our outgroup remains in the tree even during bootstraping
-                sample_list.add(outgroup)
-            distDict_temp = makeDistMatrix(sample_list, sharedDict, alleleDict, dist_metric)
-            tree_temp = drawTree(distDict_temp, sample_list, outgroup, prefix, bootstrap)
-            nodeDict = bootstrapTree(nodeDict, tree_temp, sample_list) #Determine whether each node in original tree is found in tree_temp
+                bootstrap_samples.add(outgroup)
+            distDict_temp = makeDistMatrix(bootstrap_samples, sharedDict, alleleDict, dist_metric)
+            tree_temp = drawTree(distDict_temp, bootstrap_samples, outgroup, prefix, bootstrap)
+            nodeDict = bootstrapTree(nodeDict, tree_temp, bootstrap_samples) #Determine whether each node in original tree is found in tree_temp
         #Add support information to original tree
         for node in tree_original.search_nodes():
             leaf_list = []

@@ -46,14 +46,17 @@ def calc_tripletAccuracy(tripletDict, sampleDict, prefix):
                 sampleDict[sample]["corrTriplet"] += int(correct_bool)
     #Plot propotion of correct triplets per distance metric
     dist_list = sorted(errorDict.keys())
-    corr_list = []
+    corr_list = [] #Number of correct triplets
+    num_list = [] #Total number of triplets analyzed
     [total_corr, total_triplets] = [0,0]
     for dist in dist_list:
-        corr_list.append(errorDict[dist]["Correct"]/errorDict[dist]["Total"])
+        corr_list.append(errorDict[dist]["Correct"])
+        num_list.append(errorDict[dist]["Total"])
         total_corr += errorDict[dist]["Correct"]
         total_triplets += errorDict[dist]["Total"]
     dist_list.append("All Triplets")
-    corr_list.append(total_corr/total_triplets)
+    corr_list.append(total_corr)
+    num_list.append(total_triplets)
     corr_df = pd.DataFrame({"Distance": dist_list, "Correct Triplets": corr_list})
     sns_barplot = sns.barplot(x="Distance", y="Correct Triplets", data=corr_df)
     fig = sns_barplot.get_figure()
@@ -61,30 +64,30 @@ def calc_tripletAccuracy(tripletDict, sampleDict, prefix):
 
     #Write correct triplet rate into text file
     f_output = open(prefix + ".evalPhylo.txt", 'w')
-    f_output.write("\n".join([str(dist_list[i]) + "\t" + str(corr_list[i]) for i in range(len(dist_list))]) + "\n")
+    f_output.write("\n".join([str(dist_list[i]) + "\t" + str(corr_list[i]) + "\t" + str(num_list[i]) + "\t" + str(float(corr_list[i] / num_list[i])) for i in range(len(dist_list))]) + "\n")
     f_output.close()
 
     return sampleDict
 
-def calc_targetStats(sampleDict, alleleDict, prefix):
-    #We first want to reformat alleleDict into sampleDict in order to have a simple list of num_reads for each target
-    for target_id in sorted(alleleDict.keys()):
-        for sample in sorted(alleleDict[target_id]["sample"].keys()):
-            if "msCount_list" not in sampleDict[sample].keys():
-                sampleDict[sample]["msCount_list"] = []
-            sampleDict[sample]["msCount_list"].append(len(alleleDict[target_id]["sample"][sample]["msCount"]))
-    sampleAccuracy = {}
-    for sample in sorted(sampleDict.keys()):
-        corr_rate = float(sampleDict[sample]["corrTriplet"] / sampleDict[sample]["numTriplet"])
-        sampleAccuracy[sample] = [round(corr_rate,3)]
-        for min_reads in range(0, 501, 20): #We want to set num_reads cutoff for 0-500
-            num_targets = len([num_reads for num_reads in sampleDict[sample]["msCount_list"] if num_reads >= min_reads])
-            sampleAccuracy[sample].append(int(num_targets))
-    sampleAccuracy_df = pd.DataFrame(sampleAccuracy, index = ["Accuracy"] + list(range(0, 501, 20)))
-    sampleAccuracy_df.to_csv(prefix + ".targetStats.txt", sep="\t")
-    return
+# def calc_targetStats(sampleDict, alleleDict, prefix):
+#     #We first want to reformat alleleDict into sampleDict in order to have a simple list of num_reads for each target
+#     for target_id in sorted(alleleDict.keys()):
+#         for sample in sorted(alleleDict[target_id]["sample"].keys()):
+#             if "msCount_list" not in sampleDict[sample].keys():
+#                 sampleDict[sample]["msCount_list"] = []
+#             sampleDict[sample]["msCount_list"].append(len(alleleDict[target_id]["sample"][sample]["msCount"]))
+#     sampleAccuracy = {}
+#     for sample in sorted(sampleDict.keys()):
+#         corr_rate = float(sampleDict[sample]["corrTriplet"] / sampleDict[sample]["numTriplet"])
+#         sampleAccuracy[sample] = [round(corr_rate,3)]
+#         for min_reads in range(0, 501, 20): #We want to set num_reads cutoff for 0-500
+#             num_targets = len([num_reads for num_reads in sampleDict[sample]["msCount_list"] if num_reads >= min_reads])
+#             sampleAccuracy[sample].append(int(num_targets))
+#     sampleAccuracy_df = pd.DataFrame(sampleAccuracy, index = ["Accuracy"] + list(range(0, 501, 20)))
+#     sampleAccuracy_df.to_csv(prefix + ".targetStats.txt", sep="\t")
+#     return
 
-def evalPhylo(sample_info, alleleDict_file, prefix, exVivo_dist, tree_file, nproc):
+def evalPhylo(sample_info, sample_list, alleleDict_file, prefix, exVivo_dist, tree_file, nproc):
     '''
     This script is made specifically for our known ex vivo HCT116 tree.  It will be used to determine the accuracy of any phylogenetic tree we calculate.  To do this, we need to input the following files:
         1) sample_info = tab-delimited file containing file location of sample bam, sample name [same as leaves in tree file], sex, and sample type (i.e. clone in ex vivo tree [2-1-G10_3-1-A2, 2-1-H7_3-6-C6, 2-1-G10_3-1-B1, 2-2-B1_3-2-A6])
@@ -99,6 +102,9 @@ def evalPhylo(sample_info, alleleDict_file, prefix, exVivo_dist, tree_file, npro
                 "Total" = total number of triplets analyzed
     '''
     sampleDict = import_sampleDict(sample_info)
+
+    #Import the samples that we want to keep for buildPhylo
+    filtered_samples = open(sample_list, 'r').read().splitlines()
 
     #Import exVivo tree distances into pandas dataframe
     exVivo_pd = pd.read_csv(exVivo_dist, delimiter=',', index_col=0)
@@ -139,19 +145,19 @@ def evalPhylo(sample_info, alleleDict_file, prefix, exVivo_dist, tree_file, npro
     print("Plotting/printing correct triplet rate")
     sampleDict = calc_tripletAccuracy(tripletDict, sampleDict, prefix)
 
-    #We want to calculate target sequencing depth per sample based on sample accuracy
-    '''The structure of alleleDict is as follows:
-        alleleDict
-            target_id (from targetDict)
-                "sample"
-                    sample (from sampleDict, which is already defined when labeling readGroups prior to HipSTR)
-                        "msCount"
-                            list of msCounts
-                        "allelotype"
-                            list of alleles (2 alleles)
-    '''
-    alleleDict = pickle.load(open(alleleDict_file, 'rb'))
-    calc_targetStats(sampleDict, alleleDict, prefix)
+    # #We want to calculate target sequencing depth per sample based on sample accuracy
+    # '''The structure of alleleDict is as follows:
+    #     alleleDict
+    #         target_id (from targetDict)
+    #             "sample"
+    #                 sample (from sampleDict, which is already defined when labeling readGroups prior to HipSTR)
+    #                     "msCount"
+    #                         list of msCounts
+    #                     "allelotype"
+    #                         list of alleles (2 alleles)
+    # '''
+    # alleleDict = pickle.load(open(alleleDict_file, 'rb'))
+    # calc_targetStats(sampleDict, alleleDict, prefix)
 
 if __name__ == "__main__":
     main()
