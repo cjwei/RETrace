@@ -55,7 +55,7 @@ def parse_args():
 
     elif args.command == "evalPhylo":
         from RETrace.MS.evalPhylo import evalPhylo
-        evalPhylo(args.sample_info, args.sample_list, args.alleleDict_file, args.prefix, args.exVivo_dist, args.tree_file, args.nproc)
+        evalPhylo(args.sample_info, args.sample_list, args.alleleDict_file, args.prefix, args.exVivo_rootDist, args.tree_file, args.nproc, args.distDict_file, args.exVivo_cellDiv)
 
     elif args.command == "importMethyl":
         from RETrace.Methyl.importMethyl import importMethyl
@@ -255,9 +255,9 @@ def add_evalPhylo_subparser(subparsers):
         action="store",
         dest="alleleDict_file",
         help="Pickle file containing alleleDict calculated from either HipSTR_allelotype or Custom_allelotype")
-    parser_evalPhylo_req.add_argument("--exVivo",
+    parser_evalPhylo_req.add_argument("--exVivo_rootDist",
         action="store",
-        dest="exVivo_dist",
+        dest="exVivo_rootDist",
         default="~/software/RETrace/Data/exVivo.rootDist.csv",
         help="csv file containing MRCA distance from root, as approximated in units of cell divisions")
     parser_evalPhylo_req.add_argument("--tree",
@@ -268,12 +268,22 @@ def add_evalPhylo_subparser(subparsers):
         action="store",
         dest="prefix",
         help="Output prefix for plot file containing proportion of correct triplets in tree")
-    parser_evalPhylo_req.add_argument("--nproc",
+
+    parser_evalPhylo_opt = parser_evalPhylo.add_argument_group("optional inputs")
+    parser_evalPhylo_opt.add_argument("--nproc",
         action="store",
         dest="nproc",
         default=10,
         type=int,
         help="Specify number of processors for evaluating accuracy of tree")
+    parser_evalPhylo_opt.add_argument("--distDict",
+        action="store",
+        dest="distDict_file",
+        help="Pickle file containing distDict calculated from buildPhylo command.  If specified, will calculate the expected vs actual number allele diff")
+    parser_evalPhylo_opt.add_argument("--exVivo_cellDiv",
+        action="store",
+        dest="exVivo_cellDiv",
+        help="csv file containing cell division differences between clones in ex vivo tree")
 
 def add_importMethyl_subparser(subparsers):
     # create the parser for "importMethyl" command

@@ -31,9 +31,12 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
     Calculate distance between two samples given their shared_targets and dist_metric
     '''
     total_dist = 0
+    total_dist_xy = 0 #We want to keep a distinction between autosomal and sex chromosomes for evalPhyo
     num_alleles = 0
+    num_alleles_xy = 0
     for target_id in shared_targets:
         target_dist = 0
+        target_alleles = 0
         for allele_indx, allele_group in alleleDict[target_id]["allele_groups"].items():
             allelotype1 = list(set(alleleDict[target_id]["sample"][sample1]["allelotype"]).intersection(set(allele_group)))
             allelotype2 = list(set(alleleDict[target_id]["sample"][sample2]["allelotype"]).intersection(set(allele_group)))
@@ -42,33 +45,40 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
                     target_dist += min(abs(allelotype1[0] - allelotype2[0]) + abs(allelotype1[1] - allelotype2[1]), abs(allelotype1[1] - allelotype2[0]) + abs(allelotype1[0]- allelotype2[1]))
                 elif dist_metric == "EqorNot":
                     target_dist += int(len(set(allelotype1).symmetric_difference(set(allelotype2)))/2)
-                num_alleles += 2
+                target_alleles = 2
             elif len(allelotype1) == 1 and len(allelotype2) == 2:
                 if dist_metric == "Abs":
                     target_dist += min(abs(allelotype1[0] - allelotype2[0]), abs(allelotype1[0] - allelotype2[1]))
                 elif dist_metric == "EqorNot":
                     if allelotype1[0] != allelotype2[0] and allelotype1[0] != allelotype2[1]:
                         target_dist += 1
-                num_alleles += 1
+                target_alleles = 1
             elif len(allelotype1) == 2 and len(allelotype2) == 1:
                 if dist_metric == "Abs":
                     target_dist += min(abs(allelotype1[0] - allelotype2[0]), abs(allelotype1[1] - allelotype2[0]))
                 elif dist_metric == "EqorNot":
                     if allelotype1[0] != allelotype2[0] and allelotype1[1] != allelotype2[0]:
                         target_dist += 1
-                num_alleles += 1
+                target_alleles = 1
             elif len(allelotype1) == 1 and len(allelotype2) == 1:
                 if dist_metric == "Abs":
                     target_dist += abs(allelotype1[0] - allelotype2[0])
                 elif dist_metric == "EqorNot":
                     if allelotype1[0] != allelotype2[0]:
                         target_dist += 1
-                num_alleles += 1
+                target_alleles = 1
+        num_alleles += target_alleles
         total_dist += target_dist
+        if "chrX" in target_id or "chrY" in target_id:
+            total_dist_xy += target_dist
+            num_alleles_xy += target_alleles
     distDict["sampleComp"][sample_pair] = {}
     distDict["sampleComp"][sample_pair]["dist"] = float(total_dist/num_alleles)
     distDict["sampleComp"][sample_pair]["num_targets"] = len(shared_targets)
+    distDict["sampleComp"][sample_pair]["num_alleles"] = int(num_alleles)
     distDict["sampleComp"][sample_pair]["num_diff"] = int(total_dist)
+    distDict["sampleComp"][sample_pair]["num_alleles_xy"] = int(num_alleles_xy)
+    distDict["sampleComp"][sample_pair]["num_diff_xy"] = int(total_dist_xy)
 
     return distDict
 
