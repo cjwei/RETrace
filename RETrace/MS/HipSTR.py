@@ -4,7 +4,7 @@ import os
 import subprocess
 import pickle
 
-def run_HipSTR(sampleDict, HipSTR_vcf, prefix, fasta_loc, picard_loc, HipSTR_loc, target_bed):
+def run_HipSTR(sampleDict, HipSTR_vcf, fasta_loc, picard_loc, HipSTR_loc, target_bed):
     '''
     Wrapper command to add readgroup to bam files and run HipSTR
     '''
@@ -24,14 +24,14 @@ def run_HipSTR(sampleDict, HipSTR_vcf, prefix, fasta_loc, picard_loc, HipSTR_loc
     HipSTR_command = HipSTR_loc + "/HipSTR --bams " + ",".join(sorted(readGroup_list)) + " " + \
         "--fasta " + fasta_loc + " " + \
         "--regions " + target_bed + " " + \
-        "--str-vcf " + HipSTR_vcf + " --log " + HipSTR_vcf.replace('vcf', '') + ".log --use-unpaired --no-rmdup"
+        "--str-vcf " + HipSTR_vcf + ".gz --log " + HipSTR_vcf.replace('.vcf.gz', '') + ".log --use-unpaired --no-rmdup"
     print(HipSTR_command)
-    gunzip_command = "gunzip " + prefix + ".HipSTR.vcf.gz"
+    gunzip_command = "gunzip " + HipSTR_vcf + ".gz"
     subprocess.call(HipSTR_command, shell=True)
     subprocess.call(gunzip_command, shell=True)
     return
 
-def parseVCF(sampleDict, targetDict, HipSTR_vcf, prefix, min_qual, min_reads, max_stutter):
+def parseVCF(sampleDict, targetDict, HipSTR_vcf, alleleDict_file, min_qual, min_reads, max_stutter):
     '''
     Parse HipSTR vcf output into alleleDict with the following structure:
         alleleDict
@@ -45,8 +45,8 @@ def parseVCF(sampleDict, targetDict, HipSTR_vcf, prefix, min_qual, min_reads, ma
     '''
     print("Extracting allelotype from HipSTR output")
     alleleDict = {}
-    f_goodTargets = open(prefix + ".goodTargets.txt", "w") #This file contains all targets that we kept for alleleDict and subsequent buildPhylo
-    f_badTargets = open(prefix + ".badTargets.txt", "w") #This file will contain all the targets thrown out during filtering
+    # f_goodTargets = open(prefix + ".goodTargets.txt", "w") #This file contains all targets that we kept for alleleDict and subsequent buildPhylo
+    # f_badTargets = open(prefix + ".badTargets.txt", "w") #This file will contain all the targets thrown out during filtering
     with open(HipSTR_vcf) as vcf:
         for line in vcf:
             if not line.startswith('##'):
@@ -79,14 +79,14 @@ def parseVCF(sampleDict, targetDict, HipSTR_vcf, prefix, min_qual, min_reads, ma
                                     [msCount, freq] = msCount_info.split('|')
                                     alleleDict[target_id]["sample"][sample]["msCount"].extend([int(msCount)] * int(freq))
                                 alleleDict[target_id]["sample"][sample]["allelotype"] = [int(allele) + ref_MS_len for allele in allelotype.split('|')]
-                                f_goodTargets.write(target_id + "\t" + sample + "\t" + "\t".join([allelotype, prob_genotype, num_reads, num_stutter, msCounts]) + "\n")
-                            else: #We want to print out all targets that are thrown out during filtering
-                                f_badTargets.write(target_id + "\t" + sample + "\t" + "\t".join([allelotype, prob_genotype, num_reads, num_stutter, msCounts]) + "\n")
-    f_goodTargets.close()
-    f_badTargets.close()
+                            #     f_goodTargets.write(target_id + "\t" + sample + "\t" + "\t".join([allelotype, prob_genotype, num_reads, num_stutter, msCounts]) + "\n")
+                            # else: #We want to print out all targets that are thrown out during filtering
+                            #     f_badTargets.write(target_id + "\t" + sample + "\t" + "\t".join([allelotype, prob_genotype, num_reads, num_stutter, msCounts]) + "\n")
+    # f_goodTargets.close()
+    # f_badTargets.close()
     return alleleDict
 
-def HipSTR_allelotype(sample_info, HipSTR_vcf, prefix,
+def HipSTR_allelotype(sample_info, HipSTR_vcf, alleleDict_file,
     fasta_loc, picard_loc, HipSTR_loc,
     target_bed, target_info,
     min_qual, min_reads, max_stutter):
@@ -104,11 +104,11 @@ def HipSTR_allelotype(sample_info, HipSTR_vcf, prefix,
 
     #Run HipSTR if you haven't done so already
     if not os.path.isfile('./' + HipSTR_vcf):
-        run_HipSTR(sampleDict, HipSTR_vcf, prefix, fasta_loc, picard_loc, HipSTR_loc, target_bed)
+        run_HipSTR(sampleDict, HipSTR_vcf, fasta_loc, picard_loc, HipSTR_loc, target_bed)
 
     #Import HipSTR to alleleDict
-    if not os.path.isfile('./' + prefix + '.HipSTR.alleleDict.pkl'):
-        alleleDict = parseVCF(sampleDict, targetDict, HipSTR_vcf, prefix, min_qual, min_reads, max_stutter)
-        pickle.dump(alleleDict, open(prefix + ".HipSTR.alleleDict.pkl", "wb"))
+    if not os.path.isfile('./' + alleleDict_file):
+        alleleDict = parseVCF(sampleDict, targetDict, HipSTR_vcf, alleleDict_file, min_qual, min_reads, max_stutter)
+        pickle.dump(alleleDict, open(alleleDict_file, "wb"))
     else:
-        print("Allelotype already available at:\t" + prefix + ".HipSTR.alleleDict.pkl")
+        print("Allelotype already available at:\t" + alleleDict_file)
