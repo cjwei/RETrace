@@ -26,6 +26,11 @@ def parse_args():
     add_refPD_subparser(subparsers)
     add_methRate_subparser(subparsers)
 
+    '''
+    MS+Methyl Combined subparsers
+    '''
+    add_combinedPhylo_subparser(subparsers)
+
     if len(sys.argv) > 1:
         args = parser.parse_args()
     else:
@@ -34,7 +39,7 @@ def parse_args():
 
     if args.command == "HipSTR_allelotype":
         from RETrace.MS.HipSTR import HipSTR_allelotype
-        HipSTR_allelotype(args.sample_info, args.HipSTR_vcf, args.prefix,
+        HipSTR_allelotype(args.sample_info, args.HipSTR_vcf, args.alleleDict_file,
             args.fasta_loc, args.picard_loc, args.HipSTR_loc,
             args.target_bed, args.target_info,
             args.min_qual, args.min_reads, args.max_stutter)
@@ -69,6 +74,11 @@ def parse_args():
         from RETrace.Methyl.pairwise_methRate import pairwise_methRate
         pairwise_methRate(args.sample_list, args.sample_methDict, args.Ensemble_gff, args.prefix)
 
+    elif args.command == "combinedPhylo":
+        from RETrace.Combined.combinedPhylo import combinedPhylo
+        combinedPhylo(args.sample_list, args.target_info, args.alleleDict_file, args.methDict_file, args.Ensemble_gff, args.prefix,
+            args.dist_metric, args.ratio, args.outgroup)
+
 def add_HipSTR_allelotype_subparser(subparsers):
     # create the parser for "HipSTR_allelotype" command
     parser_HipSTR_allelotype = subparsers.add_parser(
@@ -86,10 +96,10 @@ def add_HipSTR_allelotype_subparser(subparsers):
         action="store",
         dest="HipSTR_vcf",
         help="Name of HipSTR vcf output file")
-    parser_HipSTR_allelotype_req.add_argument("--prefix",
+    parser_HipSTR_allelotype_req.add_argument("--alleleDict",
         action="store",
-        dest="prefix",
-        help="Output prefix for HipSTR vcf files along with any pickle dictionaries saving allelotype information")
+        dest="alleleDict_file",
+        help="Pickle file containing alleleDict calculated from HipSTR")
     parser_HipSTR_allelotype_req.add_argument("--fasta_loc",
         action="store",
         dest="fasta_loc",
@@ -374,3 +384,55 @@ def add_methRate_subparser(subparsers):
         action="store",
         dest="prefix",
         help="Prefix name for exporting pairwise methRate csv output")
+
+def add_combinedPhylo_subparser(subparsers):
+    # create the parser for "combinedPhylo" command
+    parser_combinedPhylo = subparsers.add_parser(
+        "combinedPhylo",
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+        help = "Build phylogenty by combining MS and Methyl distances between single cell pairs")
+
+    parser_combinedPhylo_req = parser_combinedPhylo.add_argument_group("required inputs")
+    parser_combinedPhylo_req.add_argument("--sample_list",
+        action="store",
+        dest="sample_list",
+        help="File containing sample names to be included in combinedPhylo calculations (one sample per line)")
+    parser_combinedPhylo_req.add_argument("--target_info",
+        action="store",
+        dest="target_info",
+        default="~/software/RETrace/Data/CA_order.20171211-20190301.info.txt",
+        help="Location of probe info file")
+    parser_combinedPhylo_req.add_argument("--alleleDict",
+        action="store",
+        dest="alleleDict_file",
+        help="Pickle file containing alleleDict calculated from either HipSTR_allelotype or Custom_allelotype")
+    parser_combinedPhylo_req.add_argument("--methDict",
+        action="store",
+        dest="methDict_file",
+        help="Pre-computed methDict pickle file containing sample information and methylation calls")
+    parser_combinedPhylo_req.add_argument("--gff",
+        action="store",
+        dest="Ensemble_gff",
+        help="Gzipped gff file containing Ensembl Regulatory Build windows")
+    parser_combinedPhylo_req.add_argument("--prefix",
+        action="store",
+        dest="prefix",
+        help="Prefix name for exporting pairwise methRate csv output")
+
+    parser_combinedPhylo_opt = parser_combinedPhylo.add_argument_group("optional inputs")
+    parser_combinedPhylo_opt.add_argument("--dist",
+        action="store",
+        dest="dist_metric",
+        default="EqorNot",
+        help="Specify distance metric for pairwise comparisons [Abs, EqorNot]")
+    parser_combinedPhylo_opt.add_argument("--ratio",
+        action="store",
+        dest="ratio",
+        default=1.0,
+        type=float,
+        help="Ratio of MS to Methyl contribution for building phylogeny (0.0 = all methyl, 0.5 = equal MS/Methyl, 1.0 = all MS)")
+    parser_combinedPhylo_opt.add_argument("--outgroup",
+        action="store",
+        dest="outgroup",
+        default="Midpoint",
+        help="Specify outgroup for rooted NJ tree [NA, Midpoint]")

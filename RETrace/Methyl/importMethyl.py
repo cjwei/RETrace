@@ -2,6 +2,7 @@
 import pickle
 import pybedtools
 from tqdm import tqdm
+import gzip
 
 def CGIstats(methDict, ref_CGI):
     for sample_name in sorted(methDict["sample"].keys()):
@@ -60,8 +61,13 @@ def calcStats(methDict, prefix):
 def parseMethCall(methDict):
     for sample_name in sorted(methDict["sample"].keys()):
         print("Importing:\t" + sample_name)
-        f_methCall = open(methDict["sample"][sample_name]["tsv_file"])
+        if "gz" in methDict["sample"][sample_name]["tsv_file"]:
+            f_methCall = gzip.open(methDict["sample"][sample_name]["tsv_file"], 'rb')
+        else:
+            f_methCall = open(methDict["sample"][sample_name]["tsv_file"])
         for line in f_methCall:
+            if "gz"in methDict["sample"][sample_name]["tsv_file"]:
+                line = line.decode('utf-8')
             if line.startswith('#'):
                 continue
             else:

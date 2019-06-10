@@ -4,10 +4,10 @@ from tqdm import tqdm
 import re
 import gzip
 
-def importReg(Ensembl_gff): #High memory requirement (~40gb for hg19 Ensembl Reg Build)
+def importReg(Ensemble_gff): #High memory requirement (~40gb for hg19 Ensembl Reg Build)
     regDict = {}
     #We want to import the Ensembl Regulatory Build windows from the gff file
-    with gzip.GzipFile(Ensembl_gff, 'rb') as f_gff:
+    with gzip.GzipFile(Ensemble_gff, 'rb') as f_gff:
         for line in f_gff:
             (chr, source, reg_type, start, end, score, strand, frame, attribute) = line.decode('utf-8').split("\t") #Based on gff format on Ensembl <https://uswest.ensembl.org/info/website/upload/gff.html>
             reg_name = reg_type + ':' + chr + ':' + start + '-' + end
@@ -64,7 +64,7 @@ def calc_methRate(filtered_samples, sampleDict, regDict, prefix):
         f_methRate.write(reg_name + ',' + ','.join(str(x) for x in methRate_list) + "\n")
     f_methRate.close()
 
-def pairwise_methRate(sample_list, sample_methDict, Engsemble_gff, prefix):
+def pairwise_methRate(sample_list, sample_methDict, Ensemble_gff, prefix):
     '''
     The script will calculate methRate across Ensembl Regulatory Build windows in order to perform NMF and UMAP/tSNE plotting for single cells
     It will output a prefix.methRate.csv file summarizing the matrix containing methRate across Ensembl Regulatory Build windows for each pairwise comparison of cells
@@ -80,7 +80,7 @@ def pairwise_methRate(sample_list, sample_methDict, Engsemble_gff, prefix):
 
     #Import Ensemble Regulatory Build windows
     print("Import regDict (containing Ensemble Regulatory Build Windows)")
-    regDict = importReg(Engsemble_gff)
+    regDict = importReg(Ensemble_gff)
 
     #Calculate pairwise methRate across Ensemble Regulatory Build windows
     print("Calculating pairwise methRate")
