@@ -61,7 +61,7 @@ row.names(tsne$Y) <- colnames(cell.scores)
 #row.names(tsne.NeuNpos$Y) <- colnames(cell.scores.NeuNpos)
 
 ## Pull out some labels (you can change this depending on what you want to extract)
-labels <- sapply(colnames(cell.scores), ExtractField, field = 3, delim = "_")
+labels <- sapply(colnames(cell.scores), ExtractField, field = 2, delim = "_")
 #labels.cortex <- sapply(colnames(cell.scores.cortex), ExtractField, field = 2, delim = "_")
 #labels.NeuNpos <- sapply(colnames(cell.scores.NeuNpos), ExtractField, field = 2, delim = "_")
 #labels <- sapply(colnames(cell.scores), ExtractField, field = 2, delim = "\\.")

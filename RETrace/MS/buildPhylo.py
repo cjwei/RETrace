@@ -219,11 +219,12 @@ def buildPhylo(sample_list, prefix, target_info, alleleDict_file, dist_metric, o
             # nodeDict[tuple(sorted(leaf_list))]["NodeID"] = node.write(format = 9)
         for i in tqdm(range(10000)): #Bootstrap resample 10,000 times
             #Random downsample from pool of available targets (target_list) to use for distance calculation
-            bootstrap_samples = set(np.random.choice(list(sampleDict.keys()), len(sampleDict.keys()), replace=True))
+            bootstrap_samples = set(np.random.choice(filtered_samples, len(filtered_samples), replace=True))
             if outgroup not in ["Midpoint", "NA"]: #We want to make sure our outgroup remains in the tree even during bootstraping
                 bootstrap_samples.add(outgroup)
-            distDict_temp = makeDistMatrix(bootstrap_samples, sharedDict, alleleDict, dist_metric)
-            tree_temp = drawTree(distDict_temp, bootstrap_samples, outgroup, prefix, bootstrap)
+            # distDict_temp = makeDistMatrix(bootstrap_samples, sharedDict, alleleDict, dist_metric) #Speed up bootstrap by removing need to create new distDict, which should not change between each pair of sample
+            # tree_temp = drawTree(distDict_temp, bootstrap_samples, outgroup, prefix, bootstrap)
+            tree_temp = drawTree(distDict_original, bootstrap_samples, outgroup, prefix, bootstrap)
             nodeDict = bootstrapTree(nodeDict, tree_temp, bootstrap_samples) #Determine whether each node in original tree is found in tree_temp
         #Add support information to original tree
         for node in tree_original.search_nodes():
@@ -231,9 +232,9 @@ def buildPhylo(sample_list, prefix, target_info, alleleDict_file, dist_metric, o
             for leaf in node:
                 leaf_list.append(leaf.name)
             if nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] > 0:
-                node_support = float(nodeDict[tuple(sorted(leaf_list))]["Num_verified"] / nodeDict[tuple(sorted(leaf_list))]["Num_sampled"])
+                node_support = round(float(nodeDict[tuple(sorted(leaf_list))]["Num_verified"] / nodeDict[tuple(sorted(leaf_list))]["Num_sampled"]),2)
             else:
-                node_support = 2.0 #Assign nodes that were not present in any bootstrap simulation a value of 2.0
+                node_support = 0.00 #Assign nodes that were not present in any bootstrap simulation a value of 2.0
             node.add_features(support = node_support)
         #Output tree with optional support values
         f_tree_bootstrap = open(prefix + '.buildPhylo.newick-bootstrap.txt', 'w')
