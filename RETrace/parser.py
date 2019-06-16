@@ -55,8 +55,8 @@ def parse_args():
 
     elif args.command == "buildPhylo":
         from RETrace.MS.buildPhylo import buildPhylo
-        buildPhylo(args.sample_list, args.prefix, args.target_info,
-            args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap)
+        buildPhylo(args.sample_info, args.sample_list, args.prefix, args.target_info,
+            args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap, args.merge)
 
     elif args.command == "evalPhylo":
         from RETrace.MS.evalPhylo import evalPhylo
@@ -202,7 +202,6 @@ def add_merge_allelotype_subparser(subparsers):
         dest = "output",
         help = "Specify output pickle file name")
 
-
 def add_buildPhylo_subparser(subparsers):
     # create the parser for "buildPhylo" comand
     parser_buildPhylo = subparsers.add_parser(
@@ -228,6 +227,10 @@ def add_buildPhylo_subparser(subparsers):
         action="store",
         dest="alleleDict_file",
         help="Pickle file containing alleleDict calculated from either HipSTR_allelotype or Custom_allelotype")
+    parser_buildPhylo_req.add_argument("--sample_info",
+        action="store",
+        dest="sample_info",
+        help="Tab-delimited file containing sample information (bam, sample_name, sex, [optional] clone/cluster)")
 
     parser_buildPhylo_opt = parser_buildPhylo.add_argument_group("optional inputs")
     parser_buildPhylo_opt.add_argument("--dist",
@@ -244,6 +247,11 @@ def add_buildPhylo_subparser(subparsers):
         action="store_true",
         default=False,
         help="Flag for indicating whether we want to bootstrap the tree to determine node support (random sampling across all samples)")
+    parser_buildPhylo_opt.add_argument("--merge",
+        action="store",
+        default=1,
+        type=int,
+        help="Indicate the number of single cells to merge together (based on clone/cluster as specified in sample_info file)")
 
 def add_evalPhylo_subparser(subparsers):
     # create the parser for "buildPhylo" comand

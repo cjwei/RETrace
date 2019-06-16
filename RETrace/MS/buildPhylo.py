@@ -7,6 +7,7 @@ from skbio.tree import nj
 from ete3 import Tree #Call ETE toolkit <http://etetoolkit.org/docs/latest/tutorial/index.html>
 from tqdm import tqdm
 import numpy as np
+import random
 
 def calcBulk(alleleDict, targetDict):
     '''
@@ -24,6 +25,38 @@ def calcBulk(alleleDict, targetDict):
             alleleDict[target_id]["allele_groups"] = {}
             for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(all_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
                 alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref
+    return alleleDict
+
+def mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge):
+    '''
+    Randomly merge allelotype of n_merge number of singe cells that belong to the same clone
+    '''
+    #We want to first determine the sample pairings that we want to use for the merge
+    cloneDict = {} #Contains all clones/samples
+    for sample in sample_list:
+        clone = sampleDict[sample]["clone"]
+        if sampleDict[sample]["clone"] in cloneDict:
+            cloneDict[clone].append(sample)
+        else:
+            cloneDict[clone] = [sample]
+    merge_list = []
+    for clone in sorted(cloneDict.keys()):
+        shuff_samples = random.shuffle(cloneDict[clone])
+        for indx in range(0, len(shuff_samples), n_merge):
+            group = tuple(sorted(shuff_samples[indx:indx + n_merge]))
+            merge_list.append(group)
+    #Merge allelotypes from raw_alleleDict
+    alleleDict = {}
+    for target_id in sorted(raw_alleleDict.keys()):
+        if target_id in targetDict.keys(): #We only awnt to analye target_id specified in targetDict
+            alleleDict[target_id] = {}
+            alleleDict[target_id]["sample"] = {}
+            for sample in sorted(raw_alleleDict[target_id]["sample"].keys()):
+                for group in merge_list:
+                    if sample in group:
+                        alleleDict[target_id]["sample"][group] = {}
+                        alleleDict[target_id]["sample"][group]["msCount"] = raw_alleleDict[target_id]["sample"][sample]["msCount"]
+                        alleleDict[target_id]["sample"][group]["allelotype"] = raw_alleleDict[target_id]["sample"][sample]["allelotype"]
     return alleleDict
 
 def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets, dist_metric):
@@ -167,7 +200,7 @@ def bootstrapTree(nodeDict, treeTemp, bootstrap_samples):
                 nodeDict[node]["Num_verified"] += 1
     return nodeDict
 
-def buildPhylo(sample_list, prefix, target_info, alleleDict_file, dist_metric, outgroup, bootstrap):
+def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, dist_metric, outgroup, bootstrap, n_merge):
     '''
     Draw phylogenetic tree based on calculated allelotype of single cells.  This is done by:
         1) Filtering out only likely alleles by creating a "pseudo"-bulk in which we cluster all single cell alleles together (calcBulk)
@@ -177,12 +210,16 @@ def buildPhylo(sample_list, prefix, target_info, alleleDict_file, dist_metric, o
     '''
 
     #Import the samples that we want to keep for buildPhylo
+    sampleDict = import_sampleDict(sample_info)
     filtered_samples = open(sample_list, 'r').read().splitlines()
 
     targetDict = import_targetDict(target_info)
 
     #Calculate "bulk" allelotype counts by merging all single cell calls
-    alleleDict = pickle.load(open(alleleDict_file, 'rb'))
+    raw_alleleDict = pickle.load(open(alleleDict_file, 'rb'))
+
+    #We want to merge n number of single cells together
+    alleleDict = mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge)
     alleleDict = calcBulk(alleleDict, targetDict)
 
     #Pre-calculate shared targets between each sample
