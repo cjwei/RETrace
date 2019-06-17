@@ -31,7 +31,7 @@ def mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge):
             merge_list.append(group)
     #Merge allelotypes from raw_alleleDict
     alleleDict = {}
-    alleleDict["mergeSC"] = [','.join(group) for group in merge_list] #We want to save the list of merged SC
+    alleleDict["mergeSC"] = ['&'.join(group) for group in merge_list] #We want to save the list of merged SC
     for target_id in sorted(raw_alleleDict.keys()):
         if target_id in targetDict.keys(): #We only want to analye target_id specified in targetDict
             alleleDict[target_id] = {}
@@ -42,7 +42,7 @@ def mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge):
             for sample in sorted(raw_alleleDict[target_id]["sample"].keys()):
                 for group in merge_list:
                     if sample in group:
-                        group_name = ','.join(group)
+                        group_name = '&'.join(group)
                         if group_name not in alleleDict[target_id]["sample"].keys():
                             alleleDict[target_id]["sample"][group_name] = {}
                             alleleDict[target_id]["sample"][group_name]["msCount"] = []
@@ -100,7 +100,7 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
 
     return distDict
 
-def makeDistMatrix(filtered_samples, sharedDict, alleleDict, dist_metric):
+def makeDistMatrix(sharedDict, alleleDict, dist_metric):
     '''
     Wrapper for calculating distance matrix (saved within distDict), which has the following structure:
         distDict
@@ -113,25 +113,25 @@ def makeDistMatrix(filtered_samples, sharedDict, alleleDict, dist_metric):
     distDict = {}
     distDict["sampleComp"] = {}
     #Calculate pairwise distance for all samples depending on shared targets (follow order specified in target_list [esp for bootstrapping, which may have duplicates due to sampling w/ replacement])
-    for sample1 in tqdm(sorted(filtered_samples)):
-        for sample2 in sorted(filtered_samples):
+    for sample1 in tqdm(sorted(alleleDict["mergeSC"])):
+        for sample2 in sorted(alleleDict["mergeSC"]):
             sample_pair = tuple(sorted([sample1,sample2]))
             if sample_pair not in distDict["sampleComp"].keys():
                 distDict = calcDist(alleleDict, distDict, sample_pair, sample1, sample2, sharedDict[sample_pair], dist_metric)
     return distDict
 
-def drawTree(distDict, filtered_samples, outgroup, prefix, bootstrap):
+def drawTree(distDict, alleleDict, outgroup, prefix, bootstrap):
     '''
     Run neighbor-joining phylogenetic tree building algorithm on pairwise cell distance (saved in distDict)
     '''
     distMatrix = []
     targetMatrix = []
     pairwise_numTargets = []
-    sc_numTargets = []
-    for sample1 in sorted(filtered_samples):
+    sample_numTargets = []
+    for sample1 in sorted(alleleDict["mergeSC"]):
         sample1_dist = []
         sample1_targets = []
-        for sample2 in sorted(filtered_samples):
+        for sample2 in sorted(alleleDict["mergeSC"]):
             sample_pair = tuple(sorted([sample1, sample2]))
             sample1_dist.append(distDict["sampleComp"][sample_pair]["dist"])
             sample1_targets.append(distDict["sampleComp"][sample_pair]["num_targets"])
@@ -140,18 +140,18 @@ def drawTree(distDict, filtered_samples, outgroup, prefix, bootstrap):
         if sample1 != sample2:
             pairwise_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
         else:
-            sc_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
+            sample_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
     if bootstrap is False: #Only output statistics for distance and number targets shared if for original tree (don't output for bootstrap resampling)
         statsOutput = open(prefix + ".buildPhylo.stats.txt", 'w')
         statsOutput.write("Avg targets shared per pair of cells:\t" + str(float(sum(pairwise_numTargets) / len(pairwise_numTargets))) + "\n")
-        statsOutput.write("Avg targets captured per single cell:\t" + str(float(sum(sc_numTargets) / len(sc_numTargets))) + "\n")
+        statsOutput.write("Avg targets captured per single cell:\t" + str(float(sum(sample_numTargets) / len(sample_numTargets))) + "\n")
         for dist_indx,dist_list in enumerate(distMatrix): #Print matrix containing distances
-            statsOutput.write(sorted(filtered_samples)[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
+            statsOutput.write(sorted(alleleDict["mergeSC"])[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
         for target_indx,target_list in enumerate(targetMatrix): #Print matrix containing number targets shared between each pair
-            statsOutput.write(sorted(filtered_samples)[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
+            statsOutput.write(sorted(alleleDict["mergeSC"])[target_indx] + "," + ",".join(str(j) for j in target_list) + "\n")
         statsOutput.close()
         pickle.dump(distDict, open(prefix + ".buildPhylo.distDict.pkl", "wb")) #We want to print out the distance information for each single cell pair that was used to buildPhylo (this will be useful for downstream statistics)
-    distObj = DistanceMatrix(distMatrix,sorted(filtered_samples))
+    distObj = DistanceMatrix(distMatrix,sorted(alleleDict["mergeSC"]))
     skbio_tree = nj(distObj, result_constructor=str)
     ete_tree = Tree(skbio_tree) #We use skbio to first make a tree from distance matrix then convert to ete tree
     if outgroup is "NA":
@@ -226,8 +226,8 @@ def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, d
 
     #Calculate original tree using all samples found within sampleDict
     print("\tCalculating distance matrix for each pairwise comparison and drawing original Newick tree (no bootstrap)")
-    distDict_original = makeDistMatrix(filtered_samples, sharedDict, alleleDict, dist_metric) #Calculate pairwise distance between each sample
-    tree_original = drawTree(distDict_original, filtered_samples, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
+    distDict_original = makeDistMatrix(sharedDict, alleleDict, dist_metric) #Calculate pairwise distance between each sample
+    tree_original = drawTree(distDict_original, alleleDict, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
     f_tree_original = open(prefix + '.buildPhylo.newick-original.txt', 'w')
     f_tree_original.write(tree_original.write(format = 0))
     f_tree_original.write("\n")
