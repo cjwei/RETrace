@@ -28,6 +28,7 @@ def mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge):
         random.shuffle(shuff_samples)
         for indx in range(0, len(shuff_samples), n_merge):
             group = tuple(sorted(shuff_samples[indx:indx + n_merge]))
+            print(group)
             merge_list.append(group)
     #Merge allelotypes from raw_alleleDict
     alleleDict = {}
@@ -64,9 +65,7 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
     Calculate distance between two samples given their shared_targets and dist_metric
     '''
     total_dist = 0
-    total_dist_xy = 0 #We want to keep a distinction between autosomal and sex chromosomes for evalPhyo
     num_alleles = 0
-    num_alleles_xy = 0
     for target_id in shared_targets:
         for allele_indx, allele_group in alleleDict[target_id]["allele_groups"].items():
             dist_list = [] #We want to keep track of all possible distances between equal chunks of allelotype1 and allelotype2 and choose the minimum
@@ -87,23 +86,18 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
             # print(target_id + "\t" + sample1 + "\t" + sample2 + "\t" + str(allele_indx) + "\t" + ','.join(str(w) for w in allele_group) + "\t" + ','.join(str(x) for x in allelotype1) + "\t" + ','.join(str(y) for y in allelotype2) + "\t" + str(min(dist_list)) + "\t" + str(n))
             total_dist += min(dist_list)
             num_alleles += n
-            if "chrX" in target_id or "chrY" in target_id:
-                total_dist_xy += min(dist_list)
-                num_alleles_xy += n
     distDict["sampleComp"][sample_pair] = {}
     distDict["sampleComp"][sample_pair]["dist"] = float(total_dist/num_alleles)
     distDict["sampleComp"][sample_pair]["num_targets"] = len(shared_targets)
     distDict["sampleComp"][sample_pair]["num_alleles"] = int(num_alleles)
     distDict["sampleComp"][sample_pair]["num_diff"] = int(total_dist)
-    distDict["sampleComp"][sample_pair]["num_alleles_xy"] = int(num_alleles_xy)
-    distDict["sampleComp"][sample_pair]["num_diff_xy"] = int(total_dist_xy)
-
     return distDict
 
 def makeDistMatrix(sharedDict, alleleDict, dist_metric):
     '''
     Wrapper for calculating distance matrix (saved within distDict), which has the following structure:
         distDict
+            "mergeSC"
             "sampleComp"
                 sample1
                     sample2
@@ -111,6 +105,7 @@ def makeDistMatrix(sharedDict, alleleDict, dist_metric):
                         "num_targets"
     '''
     distDict = {}
+    distDict["mergeSC"] = alleleDict["mergeSC"] #We want to save the names of each mergeSC into distDict
     distDict["sampleComp"] = {}
     #Calculate pairwise distance for all samples depending on shared targets (follow order specified in target_list [esp for bootstrapping, which may have duplicates due to sampling w/ replacement])
     for sample1 in tqdm(sorted(alleleDict["mergeSC"])):

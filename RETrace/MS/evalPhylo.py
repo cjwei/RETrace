@@ -11,7 +11,7 @@ import random
 import pickle
 manager = multiprocessing.Manager()
 
-def multi_calcTriplets(triplet_group, NJTree, rootDist_pd, sampleDict, tripletDict):
+def multi_calcTriplets(triplet_group, NJTree, rootDist_pd, cloneDict, tripletDict):
     for triplet in tqdm(triplet_group):
         tree_dist = []
         ref_dist = []
@@ -19,7 +19,7 @@ def multi_calcTriplets(triplet_group, NJTree, rootDist_pd, sampleDict, tripletDi
             MRCA = NJTree.get_common_ancestor([triplet[sample_pair[0]], triplet[sample_pair[1]]])
             MRCA_dist = NJTree.get_distance(MRCA)
             tree_dist.append(MRCA_dist)
-            ref_dist.append(rootDist_pd.loc[sampleDict[triplet[sample_pair[0]]]["clone"]][sampleDict[triplet[sample_pair[1]]]["clone"]])
+            ref_dist.append(rootDist_pd.loc[cloneDict[triplet[sample_pair[0]]]][cloneDict[triplet[sample_pair[1]]]])
         #We want to save the count information in encoded string treeDict[triplet]: ref_dist,[1 (correct) or 0 (incorrect)]
         if tree_dist.index(max(tree_dist)) == ref_dist.index(max(ref_dist)): #If using MRCA depth as comparison metric
             tripletDict[triplet] = str(max(ref_dist)) + ",1"
@@ -27,7 +27,7 @@ def multi_calcTriplets(triplet_group, NJTree, rootDist_pd, sampleDict, tripletDi
             tripletDict[triplet] = str(max(ref_dist)) + ",0"
     return
 
-def calc_tripletAccuracy(tripletDict, sampleDict, prefix):
+def calc_tripletAccuracy(tripletDict, prefix):
     errorDict = {}
     for triplet in tqdm(sorted(tripletDict.keys())):
         (ref_dist, correct_bool) = tripletDict[triplet].split(',')
@@ -38,12 +38,6 @@ def calc_tripletAccuracy(tripletDict, sampleDict, prefix):
                 errorDict[ref_dist]["Total"] = 0
             errorDict[ref_dist]["Correct"] += int(correct_bool)
             errorDict[ref_dist]["Total"] += 1
-            for sample in triplet: #We want to keep track of the number of times the given sample was captured in a triplet and how many times this was a correct triplet
-                if "numTriplet" not in sampleDict[sample].keys():
-                    sampleDict[sample]["numTriplet"] = 0
-                    sampleDict[sample]["corrTriplet"] = 0
-                sampleDict[sample]["numTriplet"] += 1
-                sampleDict[sample]["corrTriplet"] += int(correct_bool)
     #Plot propotion of correct triplets per distance metric
     dist_list = sorted(errorDict.keys())
     corr_list = [] #Number of correct triplets
@@ -67,60 +61,7 @@ def calc_tripletAccuracy(tripletDict, sampleDict, prefix):
     f_output.write("\n".join([str(dist_list[i]) + "\t" + str(corr_list[i]) + "\t" + str(num_list[i]) + "\t" + str(float(corr_list[i] / num_list[i])) for i in range(len(dist_list))]) + "\n")
     f_output.close()
 
-    return sampleDict
-
-def evalNoise(sampleDict, distDict, cellDiv_pd, prefix):
-    '''
-    We want to calculate the difference in the number of different alleles vs number of expected differences.
-    noise_rate: the ratio of number of alleles different vs the expected number of alleles difference based on cell divisions
-        noise_rate = (num_diff)/(num_alleles * num_cellDiv * 10^-3)
-    noise_abs: absolute difference between actual and expected number of alleles difference based on cell divisions (this will allow us to determine whether noise is adding or subtracting more alleles)
-        noise_abs = (num_diff - (num_alleles * num_cellDiv * 10^-3)) / num_alleles (normalized over number of alleles; shows rate of alleles more or less than expected)
-    '''
-    noise_out = open(prefix + ".evalPhylo.noise.txt", 'w')
-    noise_out.write("Sample1\tSample2\tnum_cellDiv\t" +
-        "num_alleles\tnum_diff\tnoise_rate\tnoise_abs\t" +
-        "num_alleles_xy\tnum_diff_xy\tnoise_rate_xy\tnoise_abs_xy\n")
-    for sample_pair in sorted(distDict["sampleComp"].keys()):
-        [sample1, sample2] = sample_pair
-        if sample1 != sample2: #We want to skip self-comparisons of single cells, which might skew statistics
-            [clone1, clone2] = [sampleDict[sample1]["clone"], sampleDict[sample2]["clone"]]
-            num_diff = distDict["sampleComp"][sample_pair]["num_diff"]
-            num_alleles = distDict["sampleComp"][sample_pair]["num_alleles"]
-
-            num_diff_xy = distDict["sampleComp"][sample_pair]["num_diff_xy"]
-            num_alleles_xy = distDict["sampleComp"][sample_pair]["num_alleles_xy"]
-
-            num_cellDiv = cellDiv_pd.loc[clone1][clone2]
-            noise_out.write(sample1 + "\t" + sample2 + "\t" + str(num_cellDiv) + "\t")
-            if num_alleles > 0:
-                noise_rate = float(num_diff / (num_alleles * num_cellDiv * (10 ** -3)))
-                noise_abs = float((num_diff - (num_alleles * num_cellDiv * (10 ** -3))) / num_alleles)
-                noise_out.write(str(num_alleles) + "\t" + str(num_diff) + "\t" + str(round(noise_rate,3)) + "\t" + str(round(noise_abs,3)) + "\t")
-                if num_alleles_xy > 0:
-                    noise_rate_xy = float(num_diff_xy / (num_alleles_xy * num_cellDiv * (10 ** -3)))
-                    noise_abs_xy = float((num_diff_xy - (num_alleles_xy * num_cellDiv * (10 ** -3))) / num_alleles_xy)
-                    noise_out.write(str(num_alleles_xy) + "\t" + str(num_diff_xy) + "\t" + str(round(noise_rate_xy,3)) + "\t" + str(round(noise_abs_xy,3)))
-            noise_out.write("\n")
-    noise_out.close()
-
-# def calc_targetStats(sampleDict, alleleDict, prefix):
-#     #We first want to reformat alleleDict into sampleDict in order to have a simple list of num_reads for each target
-#     for target_id in sorted(alleleDict.keys()):
-#         for sample in sorted(alleleDict[target_id]["sample"].keys()):
-#             if "msCount_list" not in sampleDict[sample].keys():
-#                 sampleDict[sample]["msCount_list"] = []
-#             sampleDict[sample]["msCount_list"].append(len(alleleDict[target_id]["sample"][sample]["msCount"]))
-#     sampleAccuracy = {}
-#     for sample in sorted(sampleDict.keys()):
-#         corr_rate = float(sampleDict[sample]["corrTriplet"] / sampleDict[sample]["numTriplet"])
-#         sampleAccuracy[sample] = [round(corr_rate,3)]
-#         for min_reads in range(0, 501, 20): #We want to set num_reads cutoff for 0-500
-#             num_targets = len([num_reads for num_reads in sampleDict[sample]["msCount_list"] if num_reads >= min_reads])
-#             sampleAccuracy[sample].append(int(num_targets))
-#     sampleAccuracy_df = pd.DataFrame(sampleAccuracy, index = ["Accuracy"] + list(range(0, 501, 20)))
-#     sampleAccuracy_df.to_csv(prefix + ".targetStats.txt", sep="\t")
-#     return
+    return
 
 def evalPhylo(sample_info, sample_list, alleleDict_file, prefix, exVivo_rootDist, tree_file, nproc, distDict_file, exVivo_cellDiv):
     '''
@@ -137,9 +78,19 @@ def evalPhylo(sample_info, sample_list, alleleDict_file, prefix, exVivo_rootDist
                 "Total" = total number of triplets analyzed
     '''
     sampleDict = import_sampleDict(sample_info)
-
-    #Import the samples that we want to keep for buildPhylo
-    filtered_samples = open(sample_list, 'r').read().splitlines()
+    #We want to extract only the clone information for sampleDict
+    distDict = pickle.load(open(distDict_file, 'rb'))
+    cloneDict = {}
+    for mergeSC in distDict["mergeSC"]:
+        sample_list = mergeSC.split('&')
+        clone_list = []
+        for sample in sample_list:
+            clone_list.append(sampleDict[sample]["clone"])
+        if len(set(clone_list)) > 1:
+            print("Error: Merged SC do not belong to sample clone")
+            return
+        else:
+            cloneDict[mergeSC] = clone_list[0]
 
     #Import exVivo tree distances into pandas dataframe
     rootDist_pd = pd.read_csv(exVivo_rootDist, delimiter=',', index_col=0)
@@ -154,12 +105,12 @@ def evalPhylo(sample_info, sample_list, alleleDict_file, prefix, exVivo_rootDist
     jobs = []
     triplet_set = set()
     print("Naming all triplets in tree")
-    for sample1 in tqdm(sorted(sampleDict.keys())):
-        clone1 = sampleDict[sample1]["clone"]
-        for sample2 in sorted(sampleDict.keys()):
-            clone2 = sampleDict[sample2]["clone"]
-            for sample3 in sorted(sampleDict.keys()):
-                clone3 = sampleDict[sample3]["clone"]
+    for sample1 in tqdm(distDict["mergeSC"]):
+        clone1 = cloneDict[sample1]
+        for sample2 in sorted(distDict["mergeSC"]):
+            clone2 = cloneDict[sample2]
+            for sample3 in sorted(distDict["mergeSC"]):
+                clone3 = cloneDict[sample3]
                 triplet = tuple(sorted([sample1, sample2, sample3]))
                 if len(set([clone1, clone2, clone3])) >= 2 and len(set(triplet)) == 3:
                 # if len(set([clone1, clone2, clone3])) == 3 and triplet not in triplet_list: #We want only triplets where each of the three leaves stem from different clones
@@ -169,7 +120,7 @@ def evalPhylo(sample_info, sample_list, alleleDict_file, prefix, exVivo_rootDist
     print("Calculating correct triplet rate")
     random.shuffle(triplet_list) #We want to randomize in order to even processing time
     for triplet_group in [triplet_list[i::nproc] for i in range(nproc)]:
-        p = multiprocessing.Process(target = multi_calcTriplets, args = (triplet_group, NJTree, rootDist_pd, sampleDict, tripletDict))
+        p = multiprocessing.Process(target = multi_calcTriplets, args = (triplet_group, NJTree, rootDist_pd, cloneDict, tripletDict))
         jobs.append(p)
         p.start()
     #Join tripletDict
@@ -178,28 +129,7 @@ def evalPhylo(sample_info, sample_list, alleleDict_file, prefix, exVivo_rootDist
 
     #Plot percentage of correct triplets
     print("Plotting/printing correct triplet rate")
-    sampleDict = calc_tripletAccuracy(tripletDict, sampleDict, prefix)
-
-    #We want to determine the expected (based on cell divisions) vs actual (as calculated by buildPhylo EqorNot) number of target allele diff.  This will give us insight into much noise is being added from experiments
-    if distDict_file is not None and exVivo_cellDiv is not None:
-        print("Calculating expected vs actual number of allele difference")
-        distDict = pickle.load(open(distDict_file, 'rb'))
-        cellDiv_pd = pd.read_csv(exVivo_cellDiv, delimiter=',', index_col=0)
-        evalNoise(sampleDict, distDict, cellDiv_pd, prefix)
-
-    # #We want to calculate target sequencing depth per sample based on sample accuracy
-    # '''The structure of alleleDict is as follows:
-    #     alleleDict
-    #         target_id (from targetDict)
-    #             "sample"
-    #                 sample (from sampleDict, which is already defined when labeling readGroups prior to HipSTR)
-    #                     "msCount"
-    #                         list of msCounts
-    #                     "allelotype"
-    #                         list of alleles (2 alleles)
-    # '''
-    # alleleDict = pickle.load(open(alleleDict_file, 'rb'))
-    # calc_targetStats(sampleDict, alleleDict, prefix)
+    calc_tripletAccuracy(tripletDict, prefix)
 
 if __name__ == "__main__":
     main()
