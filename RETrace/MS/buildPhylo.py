@@ -9,31 +9,14 @@ from tqdm import tqdm
 import numpy as np
 import random
 
-def calcBulk(alleleDict, targetDict):
-    '''
-    Cluster all alleles belonging to given target across all sample.  Use these as possible "allele_groups"
-    '''
-    for target_id in sorted(alleleDict.keys()):
-        if target_id in targetDict.keys(): #We only want to analyze target_id specified in targetDict
-            sub_len = len(targetDict[target_id]["sub_seq"])
-            all_alleles = set()
-            for sample in sorted(alleleDict[target_id]["sample"].keys()):
-                try:
-                    all_alleles.update([int(allele/sub_len) for allele in alleleDict[target_id]["sample"][sample]["allelotype"]]) #Convert alleles to number of subunits (because we want to group all consecutive integer number subunit alleles)
-                except:
-                    continue
-            alleleDict[target_id]["allele_groups"] = {}
-            for indx, group in enumerate(more_itertools.consecutive_groups(sorted(set(all_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
-                alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(group)] #Save allele groups in terms of raw number of bases difference from ref
-    return alleleDict
-
 def mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge):
     '''
     Randomly merge allelotype of n_merge number of singe cells that belong to the same clone
+    We also want to cluster all alleles belonging to given target across all sample.  Use these as possible "allele_clusters"
     '''
     #We want to first determine the sample pairings that we want to use for the merge
     cloneDict = {} #Contains all clones/samples
-    for sample in sample_list:
+    for sample in filtered_samples:
         clone = sampleDict[sample]["clone"]
         if sampleDict[sample]["clone"] in cloneDict:
             cloneDict[clone].append(sample)
@@ -41,22 +24,39 @@ def mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge):
             cloneDict[clone] = [sample]
     merge_list = []
     for clone in sorted(cloneDict.keys()):
-        shuff_samples = random.shuffle(cloneDict[clone])
+        shuff_samples = cloneDict[clone]
+        random.shuffle(shuff_samples)
         for indx in range(0, len(shuff_samples), n_merge):
             group = tuple(sorted(shuff_samples[indx:indx + n_merge]))
             merge_list.append(group)
     #Merge allelotypes from raw_alleleDict
     alleleDict = {}
+    alleleDict["mergeSC"] = [','.join(group) for group in merge_list] #We want to save the list of merged SC
     for target_id in sorted(raw_alleleDict.keys()):
-        if target_id in targetDict.keys(): #We only awnt to analye target_id specified in targetDict
+        if target_id in targetDict.keys(): #We only want to analye target_id specified in targetDict
             alleleDict[target_id] = {}
             alleleDict[target_id]["sample"] = {}
+            alleleDict[target_id]["allele_groups"] = {}
+            sub_len = len(targetDict[target_id]["sub_seq"]) #For calculating allele_clusters
+            all_alleles = set() #For calculating allele_clusters
             for sample in sorted(raw_alleleDict[target_id]["sample"].keys()):
                 for group in merge_list:
                     if sample in group:
-                        alleleDict[target_id]["sample"][group] = {}
-                        alleleDict[target_id]["sample"][group]["msCount"] = raw_alleleDict[target_id]["sample"][sample]["msCount"]
-                        alleleDict[target_id]["sample"][group]["allelotype"] = raw_alleleDict[target_id]["sample"][sample]["allelotype"]
+                        group_name = ','.join(group)
+                        if group_name not in alleleDict[target_id]["sample"].keys():
+                            alleleDict[target_id]["sample"][group_name] = {}
+                            alleleDict[target_id]["sample"][group_name]["msCount"] = []
+                            alleleDict[target_id]["sample"][group_name]["allelotype"] = []
+                        alleleDict[target_id]["sample"][group_name]["msCount"].extend(raw_alleleDict[target_id]["sample"][sample]["msCount"])
+                        alleleDict[target_id]["sample"][group_name]["allelotype"].extend(raw_alleleDict[target_id]["sample"][sample]["allelotype"])
+                        try:
+                            all_alleles.update([int(allele/sub_len) for allele in raw_alleleDict[target_id]["sample"][sample]["allelotype"]]) #Convert alleles to number of subunits (because we want to group all consecutive integer number subunit alleles)
+                        except:
+                            continue
+            for indx, allele_cluster in enumerate(more_itertools.consecutive_groups(sorted(set(all_alleles)))): #Need to use "set(filtered_alleles)" in order to prevent repeated int in filtered_alleles
+                alleleDict[target_id]["allele_groups"][indx] = [allele * sub_len for allele in list(allele_cluster)] #Save allele_cluster in terms of raw number of bases difference from ref
+            # for group in alleleDict[target_id]["sample"].keys():
+            #     print(target_id + "\t" + ','.join(group) + "\t" + ','.join(str(x) for x in alleleDict[target_id]["sample"][group]["allelotype"]))
     return alleleDict
 
 def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets, dist_metric):
@@ -68,43 +68,28 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
     num_alleles = 0
     num_alleles_xy = 0
     for target_id in shared_targets:
-        target_dist = 0
-        target_alleles = 0
         for allele_indx, allele_group in alleleDict[target_id]["allele_groups"].items():
+            dist_list = [] #We want to keep track of all possible distances between equal chunks of allelotype1 and allelotype2 and choose the minimum
             allelotype1 = list(set(alleleDict[target_id]["sample"][sample1]["allelotype"]).intersection(set(allele_group)))
             allelotype2 = list(set(alleleDict[target_id]["sample"][sample2]["allelotype"]).intersection(set(allele_group)))
-            if len(allelotype1) == 2 and len(allelotype2) == 2:
-                if dist_metric == "Abs":
-                    target_dist += min(abs(allelotype1[0] - allelotype2[0]) + abs(allelotype1[1] - allelotype2[1]), abs(allelotype1[1] - allelotype2[0]) + abs(allelotype1[0]- allelotype2[1]))
-                elif dist_metric == "EqorNot":
-                    target_dist += int(len(set(allelotype1).symmetric_difference(set(allelotype2)))/2)
-                target_alleles = 2
-            elif len(allelotype1) == 1 and len(allelotype2) == 2:
-                if dist_metric == "Abs":
-                    target_dist += min(abs(allelotype1[0] - allelotype2[0]), abs(allelotype1[0] - allelotype2[1]))
-                elif dist_metric == "EqorNot":
-                    if allelotype1[0] != allelotype2[0] and allelotype1[0] != allelotype2[1]:
-                        target_dist += 1
-                target_alleles = 1
-            elif len(allelotype1) == 2 and len(allelotype2) == 1:
-                if dist_metric == "Abs":
-                    target_dist += min(abs(allelotype1[0] - allelotype2[0]), abs(allelotype1[1] - allelotype2[0]))
-                elif dist_metric == "EqorNot":
-                    if allelotype1[0] != allelotype2[0] and allelotype1[1] != allelotype2[0]:
-                        target_dist += 1
-                target_alleles = 1
-            elif len(allelotype1) == 1 and len(allelotype2) == 1:
-                if dist_metric == "Abs":
-                    target_dist += abs(allelotype1[0] - allelotype2[0])
-                elif dist_metric == "EqorNot":
-                    if allelotype1[0] != allelotype2[0]:
-                        target_dist += 1
-                target_alleles = 1
-        num_alleles += target_alleles
-        total_dist += target_dist
-        if "chrX" in target_id or "chrY" in target_id:
-            total_dist_xy += target_dist
-            num_alleles_xy += target_alleles
+            n = min(len(allelotype1), len(allelotype2)) #We want to look the number of alleles used for matching
+            if n == 0:
+                continue #skip if at least one of the single cells don't have alleles found within allele_group
+            for i in range(0, len(allelotype1), n):
+                temp_allelotype1 = allelotype1[i:i + n]
+                for j in range(0, len(allelotype2), n):
+                    temp_allelotype2 = allelotype2[j:j + n]
+                    if dist_metric == "EqorNot":
+                        dist =  int(len(set(temp_allelotype1).symmetric_difference(set(temp_allelotype2))) / 2)
+                    elif dist_metric == "Abs":
+                        dist = sum(abs(x - y) for x, y in zip(sorted(temp_allelotype1), sorted(temp_allelotype2))) #This is based on <https://stackoverflow.com/questions/41229052/smallest-sum-of-difference-between-elements-in-two-lists>
+                    dist_list.append(dist)
+            # print(target_id + "\t" + sample1 + "\t" + sample2 + "\t" + str(allele_indx) + "\t" + ','.join(str(w) for w in allele_group) + "\t" + ','.join(str(x) for x in allelotype1) + "\t" + ','.join(str(y) for y in allelotype2) + "\t" + str(min(dist_list)) + "\t" + str(n))
+            total_dist += min(dist_list)
+            num_alleles += n
+            if "chrX" in target_id or "chrY" in target_id:
+                total_dist_xy += min(dist_list)
+                num_alleles_xy += n
     distDict["sampleComp"][sample_pair] = {}
     distDict["sampleComp"][sample_pair]["dist"] = float(total_dist/num_alleles)
     distDict["sampleComp"][sample_pair]["num_targets"] = len(shared_targets)
@@ -128,7 +113,7 @@ def makeDistMatrix(filtered_samples, sharedDict, alleleDict, dist_metric):
     distDict = {}
     distDict["sampleComp"] = {}
     #Calculate pairwise distance for all samples depending on shared targets (follow order specified in target_list [esp for bootstrapping, which may have duplicates due to sampling w/ replacement])
-    for sample1 in sorted(filtered_samples):
+    for sample1 in tqdm(sorted(filtered_samples)):
         for sample2 in sorted(filtered_samples):
             sample_pair = tuple(sorted([sample1,sample2]))
             if sample_pair not in distDict["sampleComp"].keys():
@@ -219,62 +204,67 @@ def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, d
     raw_alleleDict = pickle.load(open(alleleDict_file, 'rb'))
 
     #We want to merge n number of single cells together
+    print("\tMerging SC data")
     alleleDict = mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge)
-    alleleDict = calcBulk(alleleDict, targetDict)
 
     #Pre-calculate shared targets between each sample
+    print("\tPre-computing shared target_id between each pairwise sample")
     sharedDict = {} #Contains all shared targets between each pairwise sample
-    for sample1 in sorted(filtered_samples):
-        for sample2 in sorted(filtered_samples):
+    for sample1 in tqdm(sorted(alleleDict["mergeSC"])):
+        for sample2 in sorted(alleleDict["mergeSC"]):
             sample_pair = tuple(sorted([sample1,sample2]))
             if sample_pair not in sharedDict.keys():
                 shared_targets = []
                 for target_id in sorted(alleleDict.keys()):
+                    if target_id == "mergeSC":
+                        continue
                     if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys() and target_id in targetDict.keys(): #Only want to analyze target_id in targetDict
                         if "allelotype" in alleleDict[target_id]["sample"][sample1].keys() and "allelotype" in alleleDict[target_id]["sample"][sample2].keys():
                             shared_targets.append(target_id)
                 sharedDict[sample_pair] = shared_targets
+                # print("\t".join(sample_pair) + "\t" + str(len(shared_targets)))
 
     #Calculate original tree using all samples found within sampleDict
+    print("\tCalculating distance matrix for each pairwise comparison and drawing original Newick tree (no bootstrap)")
     distDict_original = makeDistMatrix(filtered_samples, sharedDict, alleleDict, dist_metric) #Calculate pairwise distance between each sample
     tree_original = drawTree(distDict_original, filtered_samples, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
     f_tree_original = open(prefix + '.buildPhylo.newick-original.txt', 'w')
     f_tree_original.write(tree_original.write(format = 0))
     f_tree_original.write("\n")
     f_tree_original.close()
-    #Bootstrap resample to create new distance matrices/trees and add support values to internal nodes of original tree
-    if bootstrap is True:
-        #Determine dictionary of tree nodes from tree_original
-        nodeDict = {}
-        for node in tree_original.search_nodes():
-            leaf_list = []
-            for leaf in node:
-                leaf_list.append(leaf.name) #We need to compare leaves in a node cluster without regard to order
-            nodeDict[tuple(sorted(leaf_list))] = {}
-            nodeDict[tuple(sorted(leaf_list))]["Num_verified"] = 0 #Contains values for number of times random bootstrap tree (tree_temp) contains given node
-            nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] = 0 #Contains number of times the node occured during bootstrap resampling
-            # nodeDict[tuple(sorted(leaf_list))]["NodeID"] = node.write(format = 9)
-        for i in tqdm(range(10000)): #Bootstrap resample 10,000 times
-            #Random downsample from pool of available targets (target_list) to use for distance calculation
-            bootstrap_samples = set(np.random.choice(filtered_samples, len(filtered_samples), replace=True))
-            if outgroup not in ["Midpoint", "NA"]: #We want to make sure our outgroup remains in the tree even during bootstraping
-                bootstrap_samples.add(outgroup)
-            # distDict_temp = makeDistMatrix(bootstrap_samples, sharedDict, alleleDict, dist_metric) #Speed up bootstrap by removing need to create new distDict, which should not change between each pair of sample
-            # tree_temp = drawTree(distDict_temp, bootstrap_samples, outgroup, prefix, bootstrap)
-            tree_temp = drawTree(distDict_original, bootstrap_samples, outgroup, prefix, bootstrap)
-            nodeDict = bootstrapTree(nodeDict, tree_temp, bootstrap_samples) #Determine whether each node in original tree is found in tree_temp
-        #Add support information to original tree
-        for node in tree_original.search_nodes():
-            leaf_list = []
-            for leaf in node:
-                leaf_list.append(leaf.name)
-            if nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] > 0:
-                node_support = round(float(nodeDict[tuple(sorted(leaf_list))]["Num_verified"] / nodeDict[tuple(sorted(leaf_list))]["Num_sampled"]),2)
-            else:
-                node_support = 0.00 #Assign nodes that were not present in any bootstrap simulation a value of 2.0
-            node.add_features(support = node_support)
-        #Output tree with optional support values
-        f_tree_bootstrap = open(prefix + '.buildPhylo.newick-bootstrap.txt', 'w')
-        f_tree_bootstrap.write(tree_original.write(format = 0))
-        f_tree_bootstrap.write("\n")
-        f_tree_bootstrap.close()
+    # #Bootstrap resample to create new distance matrices/trees and add support values to internal nodes of original tree
+    # if bootstrap is True:
+    #     #Determine dictionary of tree nodes from tree_original
+    #     nodeDict = {}
+    #     for node in tree_original.search_nodes():
+    #         leaf_list = []
+    #         for leaf in node:
+    #             leaf_list.append(leaf.name) #We need to compare leaves in a node cluster without regard to order
+    #         nodeDict[tuple(sorted(leaf_list))] = {}
+    #         nodeDict[tuple(sorted(leaf_list))]["Num_verified"] = 0 #Contains values for number of times random bootstrap tree (tree_temp) contains given node
+    #         nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] = 0 #Contains number of times the node occured during bootstrap resampling
+    #         # nodeDict[tuple(sorted(leaf_list))]["NodeID"] = node.write(format = 9)
+    #     for i in tqdm(range(10000)): #Bootstrap resample 10,000 times
+    #         #Random downsample from pool of available targets (target_list) to use for distance calculation
+    #         bootstrap_samples = set(np.random.choice(filtered_samples, len(filtered_samples), replace=True))
+    #         if outgroup not in ["Midpoint", "NA"]: #We want to make sure our outgroup remains in the tree even during bootstraping
+    #             bootstrap_samples.add(outgroup)
+    #         # distDict_temp = makeDistMatrix(bootstrap_samples, sharedDict, alleleDict, dist_metric) #Speed up bootstrap by removing need to create new distDict, which should not change between each pair of sample
+    #         # tree_temp = drawTree(distDict_temp, bootstrap_samples, outgroup, prefix, bootstrap)
+    #         tree_temp = drawTree(distDict_original, bootstrap_samples, outgroup, prefix, bootstrap)
+    #         nodeDict = bootstrapTree(nodeDict, tree_temp, bootstrap_samples) #Determine whether each node in original tree is found in tree_temp
+    #     #Add support information to original tree
+    #     for node in tree_original.search_nodes():
+    #         leaf_list = []
+    #         for leaf in node:
+    #             leaf_list.append(leaf.name)
+    #         if nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] > 0:
+    #             node_support = round(float(nodeDict[tuple(sorted(leaf_list))]["Num_verified"] / nodeDict[tuple(sorted(leaf_list))]["Num_sampled"]),2)
+    #         else:
+    #             node_support = 0.00 #Assign nodes that were not present in any bootstrap simulation a value of 2.0
+    #         node.add_features(support = node_support)
+    #     #Output tree with optional support values
+    #     f_tree_bootstrap = open(prefix + '.buildPhylo.newick-bootstrap.txt', 'w')
+    #     f_tree_bootstrap.write(tree_original.write(format = 0))
+    #     f_tree_bootstrap.write("\n")
+    #     f_tree_bootstrap.close()
