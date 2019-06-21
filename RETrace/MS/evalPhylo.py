@@ -63,14 +63,13 @@ def calc_tripletAccuracy(tripletDict, prefix):
 
     return
 
-def evalPhylo(sample_info, sample_list, alleleDict_file, prefix, exVivo_rootDist, tree_file, nproc, distDict_file, exVivo_cellDiv):
+def evalPhylo(sample_info, prefix, exVivo_rootDist, tree_file, nproc, distDict_file):
     '''
     This script is made specifically for our known ex vivo HCT116 tree.  It will be used to determine the accuracy of any phylogenetic tree we calculate.  To do this, we need to input the following files:
         1) sample_info = tab-delimited file containing file location of sample bam, sample name [same as leaves in tree file], sex, and sample type (i.e. clone in ex vivo tree [2-1-G10_3-1-A2, 2-1-H7_3-6-C6, 2-1-G10_3-1-B1, 2-2-B1_3-2-A6])
-        2) alleleDict = dictionary containing all allele/msCount for each sample per target_id
-        3) exVivo_dist = csv file containing MRCA distance from root, as approximated in units of cell divisions
-        4) newick_tree = file containing Newick tree output
-        5) prefix = output prefix for error calculation statistics comparing calculated Newick tree to given ex vivo tree
+        2) exVivo_dist = csv file containing MRCA distance from root, as approximated in units of cell divisions
+        3) newick_tree = file containing Newick tree output
+        4) prefix = output prefix for error calculation statistics comparing calculated Newick tree to given ex vivo tree
     We will then use the above input to calculate an errorDict which contains the following structure:
         errorDict
             cell_div = reference cell division difference between nodes (ex: [2-1-G10_3-1-A2, 2-1-G10_3-1-B1, 2-2-B1_3-2-A6] = abs(max()))

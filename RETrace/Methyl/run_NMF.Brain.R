@@ -5,7 +5,7 @@ library(dplyr)
 library(Rtsne)
 
 ## Read counts
-counts <- read.table("/media/Scratch_SSD/cjwei/20190409_Methyl-Brain/5_plot_methRate/20190409_Brain_SC-only.min_CpG1.methRate.csv",
+counts <- read.table("/media/Scratch_SSD/cjwei/20190409_Brain/Methyl/3_methRate/20190409_Brain_Methyl.Filter.methRate.csv",
                      sep = ",", header = T, row.names = 1)
 counts <- as.matrix(counts)
 
@@ -61,14 +61,14 @@ tsne.NeuNpos <- Rtsne(t(cell.scores.NeuNpos), perplexity = 5)
 row.names(tsne.NeuNpos$Y) <- colnames(cell.scores.NeuNpos)
 
 ## Pull out some labels (you can change this depending on what you want to extract)
-labels <- sapply(colnames(cell.scores), ExtractField, field = 2, delim = "_")
+labels <- sapply(colnames(cell.scores), ExtractField, field = 1, delim = "_")
 labels.cortex <- sapply(colnames(cell.scores.cortex), ExtractField, field = 2, delim = "_")
 labels.NeuNpos <- sapply(colnames(cell.scores.NeuNpos), ExtractField, field = 2, delim = "_")
 #labels <- sapply(colnames(cell.scores), ExtractField, field = 2, delim = "\\.")
 #labels <- sapply(labels, ExtractField, field = 1, delim = "_")
 
 ## Plot results
-pdf(file = "/media/Scratch_SSD/cjwei/20190409_Methyl-Brain/5_plot_methRate/20190409_Brain_SC-only.min_CpG1.methRate.pdf")
+pdf(file = "/media/Scratch_SSD/cjwei/20190409_Brain/Methyl/3_methRate/20190409_Brain_Methyl.Filter.methRate.pdf")
 
 PlotDims(umap.emb, sample.groups = labels, x.lab = "umap1", y.lab = "umap2", main.title = "All brain cell types (UMAP)")
 PlotDims(tsne$Y, sample.groups = labels, x.lab = "tsne1", y.lab = "tsne2", main.title = "All brain cell types (tSNE)")

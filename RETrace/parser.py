@@ -60,7 +60,7 @@ def parse_args():
 
     elif args.command == "evalPhylo":
         from RETrace.MS.evalPhylo import evalPhylo
-        evalPhylo(args.sample_info, args.sample_list, args.alleleDict_file, args.prefix, args.exVivo_rootDist, args.tree_file, args.nproc, args.distDict_file, args.exVivo_cellDiv)
+        evalPhylo(args.sample_info, args.prefix, args.exVivo_rootDist, args.tree_file, args.nproc, args.distDict_file)
 
     elif args.command == "importMethyl":
         from RETrace.Methyl.importMethyl import importMethyl
@@ -237,7 +237,7 @@ def add_buildPhylo_subparser(subparsers):
         action="store",
         dest="dist_metric",
         default="EqorNot",
-        help="Specify distance metric for pairwise comparisons [Abs, EqorNot]")
+        help="Specify distance metric for pairwise comparisons [Abs, EqorNot, Chi]")
     parser_buildPhylo_opt.add_argument("--outgroup",
         action="store",
         dest="outgroup",
@@ -265,14 +265,6 @@ def add_evalPhylo_subparser(subparsers):
         action="store",
         dest="sample_info",
         help="Tab-delimited file containing sample information (bam, sample_name, sex, [optional] clone)")
-    parser_evalPhylo_req.add_argument("--sample_list",
-        action="store",
-        dest="sample_list",
-        help="File containing sample names to be included in calculations (one sample per line)")
-    parser_evalPhylo_req.add_argument("--alleleDict",
-        action="store",
-        dest="alleleDict_file",
-        help="Pickle file containing alleleDict calculated from either HipSTR_allelotype or Custom_allelotype")
     parser_evalPhylo_req.add_argument("--exVivo_rootDist",
         action="store",
         dest="exVivo_rootDist",
@@ -286,6 +278,10 @@ def add_evalPhylo_subparser(subparsers):
         action="store",
         dest="prefix",
         help="Output prefix for plot file containing proportion of correct triplets in tree")
+    parser_evalPhylo_req.add_argument("--distDict",
+        action="store",
+        dest="distDict_file",
+        help="Pickle file containing distDict calculated from buildPhylo command.  If specified, will calculate the expected vs actual number allele diff")
 
     parser_evalPhylo_opt = parser_evalPhylo.add_argument_group("optional inputs")
     parser_evalPhylo_opt.add_argument("--nproc",
@@ -294,14 +290,6 @@ def add_evalPhylo_subparser(subparsers):
         default=10,
         type=int,
         help="Specify number of processors for evaluating accuracy of tree")
-    parser_evalPhylo_opt.add_argument("--distDict",
-        action="store",
-        dest="distDict_file",
-        help="Pickle file containing distDict calculated from buildPhylo command.  If specified, will calculate the expected vs actual number allele diff")
-    parser_evalPhylo_opt.add_argument("--exVivo_cellDiv",
-        action="store",
-        dest="exVivo_cellDiv",
-        help="csv file containing cell division differences between clones in ex vivo tree")
 
 def add_importMethyl_subparser(subparsers):
     # create the parser for "importMethyl" command
