@@ -109,7 +109,8 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
                     p_value = 1
                 else:
                     (stat, p_value) = scipy.stats.chisquare(sample1_freq, f_exp=sample2_exp)
-                    p_value += 0.0000000001
+                if p_value == 0:
+                    p_value = 0.0000000001
                 # print(p_value)
                 total_dist += -math.log(p_value, 10)
                 num_comp += 1
