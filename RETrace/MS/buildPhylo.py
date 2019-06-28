@@ -211,7 +211,7 @@ def bootstrapTree(nodeDict, treeTemp, bootstrap_samples):
                 nodeDict[node]["Num_verified"] += 1
     return nodeDict
 
-def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, dist_metric, outgroup, bootstrap, n_merge):
+def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, dist_metric, outgroup, bootstrap, n_merge, bulk_info, bulk_alleleDict_file):
     '''
     Draw phylogenetic tree based on calculated allelotype of single cells.  This is done by:
         1) Filtering out only likely alleles by creating a "pseudo"-bulk in which we cluster all single cell alleles together (calcBulk)
@@ -233,6 +233,20 @@ def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, d
     print("\tMerging SC data")
     alleleDict = mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge)
 
+    #Import bulk info if available
+    if (bulk_info is not None) and (bulk_alleleDict_file is not None):
+        bulkDict = import_sampleDict(bulk_info)
+        bulkDict["clone"] = {}
+        #We want to extract all bulk_samples that belong to given clone
+        for bulk_sample in sorted(bulkDict.keys()):
+            if bulk_sample != "clone":
+                bulk_clone = bulkDict[bulk_sample]["clone"]
+                if bulk_clone in bulkDict["clone"].keys():
+                    bulkDict["clone"][bulk_clone].append(bulk_sample)
+                else:
+                    bulkDict["clone"][bulk_clone] = [bulk_sample]
+        bulk_alleleDict = pickle.load(open(bulk_alleleDict_file, 'rb'))
+
     #Pre-calculate shared targets between each sample
     print("\tPre-computing shared target_id between each pairwise sample")
     sharedDict = {} #Contains all shared targets between each pairwise sample
@@ -246,7 +260,15 @@ def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, d
                         continue
                     if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys() and target_id in targetDict.keys(): #Only want to analyze target_id in targetDict
                         if "allelotype" in alleleDict[target_id]["sample"][sample1].keys() and "allelotype" in alleleDict[target_id]["sample"][sample2].keys():
-                            shared_targets.append(target_id)
+                            if (bulkDict is not None) and (bulk_alleleDict is not None): #Below are checks for whether bulk HipSTR calls are homozygous
+                                if target_id in bulk_alleleDict.keys():
+                                    for bulk_sample in sorted(bulkDict["clone"][sampleDict[sample1]["clone"]] + bulkDict["clone"][sampleDict[sample2]["clone"]]):
+                                        if bulk_sample in bulk_alleleDict[target_id]["sample"].keys():
+                                            if len(set(bulk_alleleDict[target_id]["sample"][bulk_sample]["allelotype"])) > 1:
+                                                # print(target_id + "\t" + bulk_sample + "\t" + ','.join(str(allele) for allele in bulk_alleleDict[target_id]["sample"][bulk_sample]["allelotype"]))
+                                                continue #We want to skip if any bulk samples belonging to the same clone is heterozygous
+                            else:
+                                shared_targets.append(target_id)
                 sharedDict[sample_pair] = shared_targets
                 # print("\t".join(sample_pair) + "\t" + str(len(shared_targets)))
 

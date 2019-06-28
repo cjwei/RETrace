@@ -120,7 +120,7 @@ def plot_baseUMAP(sampleDict, baseDict, filtered_baseDict, base_prefix):
         color_indx += 1
     plt.legend(loc = 'best')
     plt.gca().set_aspect('equal', 'datalim')
-    plt.savefig(base_prefix + ".png")
+    plt.savefig(base_prefix + ".UMAP.png")
     return
 
 def plot_distUMAP(sampleDict, baseDict, filtered_baseDict, dist_prefix):
@@ -131,6 +131,7 @@ def plot_distUMAP(sampleDict, baseDict, filtered_baseDict, dist_prefix):
     distDict = {}
     distDict["mergeSC"] = sorted(sampleDict.keys()) #We want to specify the mergeSC to make this compatible to legacy evalPhylo
     distDict["sampleComp"] = {}
+    num_bases_list = []
     for sample1 in tqdm(sorted(sampleDict.keys())):
         for sample2 in sorted(sampleDict.keys()):
             sample_pair = tuple(sorted([sample1, sample2]))
@@ -147,6 +148,8 @@ def plot_distUMAP(sampleDict, baseDict, filtered_baseDict, dist_prefix):
                         num_bases += 1
                 distDict["sampleComp"][sample_pair]["dist"] = float(dist / num_bases)
                 distDict["sampleComp"][sample_pair]["num_bases"] = num_bases
+                num_bases_list.append(num_bases)
+    print("Average bases shared between each pair of SC:\t" + str(sum(num_bases_list) / len(num_bases_list)))
     #We want to create a distMatrix summarizing the pairwise distances
     distMatrix = []
     for sample1 in sorted(sampleDict.keys()):
@@ -164,6 +167,32 @@ def plot_distUMAP(sampleDict, baseDict, filtered_baseDict, dist_prefix):
     f_treeOut.write(ete_tree.write(format = 0))
     #We want to save the distDict for use in evalPhylo
     pickle.dump(distDict, open(dist_prefix + ".mitoPhylo.pkl", "wb"))
+
+    #We also want to draw UMAP using the pairwise distance matrix
+    distArray = np.array(distMatrix)
+    print(distArray.shape)
+    reducer = umap.UMAP()
+    embedding = reducer.fit_transform(distArray.transpose())
+
+    #Create UMAP plot for each clone.  In order to do so, we want to group UMAP embedding array with each respective clone
+    fig, ax = plt.subplots()
+    clone_set = set()
+    for sample in sorted(sampleDict.keys()):
+        clone_set.add(sampleDict[sample]["clone"])
+    color_indx = 0
+    for clone in sorted(clone_set):
+        sub_matrix = []
+        for indx in range(len(sampleDict.keys())):
+            sample = list(sorted(sampleDict.keys()))[indx]
+            if sampleDict[sample]["clone"] == clone:
+                sub_matrix.append([embedding[indx, 0], embedding[indx, 1]])
+        sub_embedding = np.array(sub_matrix)
+        ax.scatter(sub_embedding[:, 0], sub_embedding[:, 1], c=sns.color_palette()[color_indx], label=clone)
+        color_indx += 1
+    plt.legend(loc = 'best')
+    plt.gca().set_aspect('equal', 'datalim')
+    plt.savefig(dist_prefix + ".UMAP.png")
+
     return
 
 def main():

@@ -41,17 +41,20 @@ def calc_tripletAccuracy(tripletDict, prefix):
     #Plot propotion of correct triplets per distance metric
     dist_list = sorted(errorDict.keys())
     corr_list = [] #Number of correct triplets
+    rate_corr_list = [] #Rate of correct triplets
     num_list = [] #Total number of triplets analyzed
     [total_corr, total_triplets] = [0,0]
     for dist in dist_list:
         corr_list.append(errorDict[dist]["Correct"])
         num_list.append(errorDict[dist]["Total"])
+        rate_corr_list.append(errorDict[dist]["Correct"] / errorDict[dist]["Total"])
         total_corr += errorDict[dist]["Correct"]
         total_triplets += errorDict[dist]["Total"]
     dist_list.append("All Triplets")
     corr_list.append(total_corr)
+    rate_corr_list.append(total_corr / total_triplets)
     num_list.append(total_triplets)
-    corr_df = pd.DataFrame({"Distance": dist_list, "Correct Triplets": corr_list})
+    corr_df = pd.DataFrame({"Distance": dist_list, "Correct Triplets": rate_corr_list})
     sns_barplot = sns.barplot(x="Distance", y="Correct Triplets", data=corr_df)
     fig = sns_barplot.get_figure()
     fig.savefig(prefix + ".evalPhylo.eps")

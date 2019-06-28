@@ -56,7 +56,8 @@ def parse_args():
     elif args.command == "buildPhylo":
         from RETrace.MS.buildPhylo import buildPhylo
         buildPhylo(args.sample_info, args.sample_list, args.prefix, args.target_info,
-            args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap, args.merge)
+            args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap, args.merge,
+            args.bulk_info, args.bulk_alleleDict)
 
     elif args.command == "evalPhylo":
         from RETrace.MS.evalPhylo import evalPhylo
@@ -252,6 +253,16 @@ def add_buildPhylo_subparser(subparsers):
         default=1,
         type=int,
         help="Indicate the number of single cells to merge together (based on clone/cluster as specified in sample_info file)")
+    parser_buildPhylo_opt.add_argument("--bulk_alleleDict",
+        action="store",
+        dest="bulk_alleleDict",
+        default=None,
+        help="Pickle file containing alleleDict from bulk HipSTR")
+    parser_buildPhylo_opt.add_argument("--bulk_info",
+        action="store",
+        dest="bulk_info",
+        default=None,
+        help="Tab-delimited file containing bulk information (bam, sample_name, sex, [optional] clone/cluster)")
 
 def add_evalPhylo_subparser(subparsers):
     # create the parser for "buildPhylo" comand
