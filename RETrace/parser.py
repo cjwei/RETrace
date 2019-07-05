@@ -17,6 +17,7 @@ def parse_args():
     add_Custom_allelotype_subparser(subparsers)
     add_merge_allelotype_subparser(subparsers)
     add_buildPhylo_subparser(subparsers)
+    add_iterPhylo_subparser(subparsers)
     add_evalPhylo_subparser(subparsers)
 
     '''
@@ -58,6 +59,11 @@ def parse_args():
         buildPhylo(args.sample_info, args.sample_list, args.prefix, args.target_info,
             args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap, args.merge,
             args.bulk_info, args.bulk_alleleDict)
+
+    elif args.command == "iterPhylo":
+        from RETrace.MS.iterPhylo import iterPhylo
+        iterPhylo(args.sample_info, args.sample_list, args.prefix, args.target_info,
+            args.alleleDict_file, args.dist_metric)
 
     elif args.command == "evalPhylo":
         from RETrace.MS.evalPhylo import evalPhylo
@@ -263,6 +269,43 @@ def add_buildPhylo_subparser(subparsers):
         dest="bulk_info",
         default=None,
         help="Tab-delimited file containing bulk information (bam, sample_name, sex, [optional] clone/cluster)")
+
+def add_iterPhylo_subparser(subparsers):
+    # create the parser for "iterPhylo" comand
+    parser_iterPhylo = subparsers.add_parser(
+        "iterPhylo",
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+        help = "Iteratively build phylogenetic tree given allelotype of single cells")
+
+    parser_iterPhylo_req = parser_iterPhylo.add_argument_group("required inputs")
+    parser_iterPhylo_req.add_argument("--sample_list",
+        action="store",
+        dest="sample_list",
+        help="File containing sample names to be included in calculations (one sample per line)")
+    parser_iterPhylo_req.add_argument("--prefix",
+        action="store",
+        dest="prefix",
+        help="Output prefix for MS phylogenetic tree")
+    parser_iterPhylo_req.add_argument("--target_info",
+        action="store",
+        dest="target_info",
+        default="~/software/RETrace/Data/CA_order.20171211-20190301.info.txt",
+        help="Location of probe info file")
+    parser_iterPhylo_req.add_argument("--alleleDict",
+        action="store",
+        dest="alleleDict_file",
+        help="Pickle file containing alleleDict calculated from either HipSTR_allelotype or Custom_allelotype")
+    parser_iterPhylo_req.add_argument("--sample_info",
+        action="store",
+        dest="sample_info",
+        help="Tab-delimited file containing sample information (bam, sample_name, sex, [optional] clone/cluster)")
+
+    parser_iterPhylo_opt = parser_iterPhylo.add_argument_group("optional inputs")
+    parser_iterPhylo_opt.add_argument("--dist",
+        action="store",
+        dest="dist_metric",
+        default="EqorNot",
+        help="Specify distance metric for pairwise comparisons [Abs, EqorNot, Chi]")
 
 def add_evalPhylo_subparser(subparsers):
     # create the parser for "buildPhylo" comand
