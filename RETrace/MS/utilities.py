@@ -33,12 +33,13 @@ def import_sampleDict(info_file):
     sampleDict = {}
     with open(info_file) as f:
         for line in f:
-            if len(line.split()) == 4: #If clone is specified
-                (bam, sample, sex, clone) = line.split()
+            if len(line.split()) == 5: #If clone is specified (along with clone_color)
+                (bam, sample, sex, clone, clone_color) = line.split()
                 sampleDict[sample] = {}
                 sampleDict[sample]["bam"] = bam
                 sampleDict[sample]["sex"] = sex
                 sampleDict[sample]["clone"] = clone
+                sampleDict[sample]["clone_color"] = clone_color
             elif len(line.split()) == 3: #If clone is not specified
                 (bam, sample, sex) = line.split()
                 sampleDict[sample] = {}
