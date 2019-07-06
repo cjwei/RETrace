@@ -4,7 +4,7 @@ import pickle
 import more_itertools
 from skbio import DistanceMatrix
 from skbio.tree import nj
-from ete3 import Tree #Call ETE toolkit <http://etetoolkit.org/docs/latest/tutorial/index.html>
+from ete3 import Tree, TreeStyle #Call ETE toolkit <http://etetoolkit.org/docs/latest/tutorial/index.html>
 from tqdm import tqdm
 import numpy as np
 import random
@@ -227,44 +227,51 @@ def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, d
     #Calculate original tree using all samples found within sampleDict
     print("\tCalculating distance matrix for each pairwise comparison and drawing original Newick tree (no bootstrap)")
     distDict_original = makeDistMatrix(sharedDict, alleleDict, dist_metric) #Calculate pairwise distance between each sample
-    tree_original = drawTree(distDict_original, alleleDict, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
-    f_tree_original = open(prefix + '.buildPhylo.newick-original.txt', 'w')
-    f_tree_original.write(tree_original.write(format = 0))
-    f_tree_original.write("\n")
-    f_tree_original.close()
-    # #Bootstrap resample to create new distance matrices/trees and add support values to internal nodes of original tree
+    MStree = drawTree(distDict_original, alleleDict, outgroup, prefix, False) #Draw neighbor joining tree.  We want to declare Fase for bootstrap because we want to output stats file for original tree
+    f_MStree = open(prefix + '.buildPhylo.newick-original.txt', 'w')
+    f_MStree.write(MStree.write(format = 0))
+    f_MStree.write("\n")
+    f_MStree.close()
+
+    #Bootstrap resample to create new distance matrices/trees and add support values to internal nodes of original tree
+    if bootstrap is True:
+        #Determine dictionary of tree nodes from MStree
+        nodeDict = {}
+        for node in MStree.search_nodes():
+            leaf_list = []
+            for leaf in node:
+                leaf_list.append(leaf.name) #We need to compare leaves in a node cluster without regard to order
+            nodeDict[tuple(sorted(leaf_list))] = {}
+            nodeDict[tuple(sorted(leaf_list))]["Num_verified"] = 0 #Contains values for number of times random bootstrap tree (tree_temp) contains given node
+            nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] = 0 #Contains number of times the node occured during bootstrap resampling
+            # nodeDict[tuple(sorted(leaf_list))]["NodeID"] = node.write(format = 9)
+        for i in tqdm(range(10000)): #Bootstrap resample 10,000 times
+            #Random downsample from pool of available targets (target_list) to use for distance calculation
+            bootstrap_samples = set(np.random.choice(filtered_samples, len(filtered_samples), replace=True))
+            if outgroup not in ["Midpoint", "NA"]: #We want to make sure our outgroup remains in the tree even during bootstraping
+                bootstrap_samples.add(outgroup)
+            tree_temp = drawTree(distDict_original, bootstrap_samples, outgroup, prefix, bootstrap)
+            nodeDict = bootstrapTree(nodeDict, tree_temp, bootstrap_samples) #Determine whether each node in original tree is found in tree_temp
+        #Add support information to original tree
+        for node in MStree.search_nodes():
+            leaf_list = []
+            for leaf in node:
+                leaf_list.append(leaf.name)
+            if nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] > 0:
+                node_support = round(float(nodeDict[tuple(sorted(leaf_list))]["Num_verified"] / nodeDict[tuple(sorted(leaf_list))]["Num_sampled"]),2)
+            else:
+                node_support = 0.00 #Assign nodes that were not present in any bootstrap simulation a value of 2.0
+            node.add_features(support = node_support)
+        #Output tree with optional support values
+        f_tree_bootstrap = open(prefix + '.buildPhylo.newick-bootstrap.txt', 'w')
+        f_tree_bootstrap.write(MStree.write(format = 0))
+        f_tree_bootstrap.write("\n")
+        f_tree_bootstrap.close()
+
+    #We want to use ete to visualize the tree with colors for corresponding clones (based on sampleDict[sample]["clone"])
+    MStree.render(prefix + ".buildPhylo.svg")
+    # ts = TreeStyle()
+    # ts.show_leaf_name = True
     # if bootstrap is True:
-    #     #Determine dictionary of tree nodes from tree_original
-    #     nodeDict = {}
-    #     for node in tree_original.search_nodes():
-    #         leaf_list = []
-    #         for leaf in node:
-    #             leaf_list.append(leaf.name) #We need to compare leaves in a node cluster without regard to order
-    #         nodeDict[tuple(sorted(leaf_list))] = {}
-    #         nodeDict[tuple(sorted(leaf_list))]["Num_verified"] = 0 #Contains values for number of times random bootstrap tree (tree_temp) contains given node
-    #         nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] = 0 #Contains number of times the node occured during bootstrap resampling
-    #         # nodeDict[tuple(sorted(leaf_list))]["NodeID"] = node.write(format = 9)
-    #     for i in tqdm(range(10000)): #Bootstrap resample 10,000 times
-    #         #Random downsample from pool of available targets (target_list) to use for distance calculation
-    #         bootstrap_samples = set(np.random.choice(filtered_samples, len(filtered_samples), replace=True))
-    #         if outgroup not in ["Midpoint", "NA"]: #We want to make sure our outgroup remains in the tree even during bootstraping
-    #             bootstrap_samples.add(outgroup)
-    #         # distDict_temp = makeDistMatrix(bootstrap_samples, sharedDict, alleleDict, dist_metric) #Speed up bootstrap by removing need to create new distDict, which should not change between each pair of sample
-    #         # tree_temp = drawTree(distDict_temp, bootstrap_samples, outgroup, prefix, bootstrap)
-    #         tree_temp = drawTree(distDict_original, bootstrap_samples, outgroup, prefix, bootstrap)
-    #         nodeDict = bootstrapTree(nodeDict, tree_temp, bootstrap_samples) #Determine whether each node in original tree is found in tree_temp
-    #     #Add support information to original tree
-    #     for node in tree_original.search_nodes():
-    #         leaf_list = []
-    #         for leaf in node:
-    #             leaf_list.append(leaf.name)
-    #         if nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] > 0:
-    #             node_support = round(float(nodeDict[tuple(sorted(leaf_list))]["Num_verified"] / nodeDict[tuple(sorted(leaf_list))]["Num_sampled"]),2)
-    #         else:
-    #             node_support = 0.00 #Assign nodes that were not present in any bootstrap simulation a value of 2.0
-    #         node.add_features(support = node_support)
-    #     #Output tree with optional support values
-    #     f_tree_bootstrap = open(prefix + '.buildPhylo.newick-bootstrap.txt', 'w')
-    #     f_tree_bootstrap.write(tree_original.write(format = 0))
-    #     f_tree_bootstrap.write("\n")
-    #     f_tree_bootstrap.close()
+    #     ts.show_branch_support = True
+    # MStree.render(prefix + ".buildPhylo.svg", tree_style=ts)

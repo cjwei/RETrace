@@ -19,6 +19,7 @@ def parse_args():
     add_buildPhylo_subparser(subparsers)
     add_iterPhylo_subparser(subparsers)
     add_evalPhylo_subparser(subparsers)
+    add_viewPhylo_subparser(subparsers)
 
     '''
     Methyl subparsers
@@ -67,6 +68,10 @@ def parse_args():
     elif args.command == "evalPhylo":
         from RETrace.MS.evalPhylo import evalPhylo
         evalPhylo(args.sample_info, args.prefix, args.exVivo_rootDist, args.tree_file, args.nproc, args.distDict_file)
+
+    elif args.command == "viewPhylo":
+        from RETrace.MS.viewPhylo import viewPhylo
+        viewPhylo(args.sample_info, args.tree_file, args.prefix, args.bootstrap)
 
     elif args.command == "importMethyl":
         from RETrace.Methyl.importMethyl import importMethyl
@@ -333,6 +338,33 @@ def add_evalPhylo_subparser(subparsers):
         default=10,
         type=int,
         help="Specify number of processors for evaluating accuracy of tree")
+
+def add_viewPhylo_subparser(subparsers):
+    # create the parser for "viewPhylo" command
+    parser_viewPhylo = subparsers.add_parser(
+        "viewPhylo",
+        formatter_class = argparse.ArgumentDefaultsHelpFormatter,
+        help = "Utilize ete3 to view phylogenetic tree derived from buildPhylo")
+
+    parser_viewPhylo_req = parser_viewPhylo.add_argument_group("required inputs")
+    parser_viewPhylo_req.add_argument("--sample_info",
+        action="store",
+        dest="sample_info",
+        help="Tab-delimited file containing sample information (bam, sample_name, sex, [optional] clone)")
+    parser_viewPhylo_req.add_argument("--tree",
+        action="store",
+        dest="tree_file",
+        help="Newick tree file")
+    parser_viewPhylo_req.add_argument("--prefix",
+        action="store",
+        dest="prefix",
+        help="Output prefix for tree file")
+
+    parser_viewPhylo_opt = parser_viewPhylo.add_argument_group("required inputs")
+    parser_viewPhylo_opt.add_argument("-bootstrap",
+        action="store_true",
+        default=False,
+        help="Flag for indicating whether we want to bootstrap the tree to determine node support (random sampling across all samples)")
 
 def add_importMethyl_subparser(subparsers):
     # create the parser for "importMethyl" command
