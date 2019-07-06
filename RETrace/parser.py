@@ -57,8 +57,7 @@ def parse_args():
     elif args.command == "buildPhylo":
         from RETrace.MS.buildPhylo import buildPhylo
         buildPhylo(args.sample_info, args.sample_list, args.prefix, args.target_info,
-            args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap, args.merge,
-            args.bulk_info, args.bulk_alleleDict)
+            args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap, args.merge)
 
     elif args.command == "iterPhylo":
         from RETrace.MS.iterPhylo import iterPhylo
@@ -244,7 +243,7 @@ def add_buildPhylo_subparser(subparsers):
         action="store",
         dest="dist_metric",
         default="EqorNot",
-        help="Specify distance metric for pairwise comparisons [Abs, EqorNot, Chi]")
+        help="Specify distance metric for pairwise comparisons [Abs, EqorNot]")
     parser_buildPhylo_opt.add_argument("--outgroup",
         action="store",
         dest="outgroup",
@@ -259,16 +258,6 @@ def add_buildPhylo_subparser(subparsers):
         default=1,
         type=int,
         help="Indicate the number of single cells to merge together (based on clone/cluster as specified in sample_info file)")
-    parser_buildPhylo_opt.add_argument("--bulk_alleleDict",
-        action="store",
-        dest="bulk_alleleDict",
-        default=None,
-        help="Pickle file containing alleleDict from bulk HipSTR")
-    parser_buildPhylo_opt.add_argument("--bulk_info",
-        action="store",
-        dest="bulk_info",
-        default=None,
-        help="Tab-delimited file containing bulk information (bam, sample_name, sex, [optional] clone/cluster)")
 
 def add_iterPhylo_subparser(subparsers):
     # create the parser for "iterPhylo" comand

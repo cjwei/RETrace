@@ -69,51 +69,25 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
         total_dist = 0
         num_comp = 0
         for target_id in shared_targets:
-            if dist_metric == "EqorNot" or dist_metric == "Abs": #We want to perform the following if we want to use discreet called allelotypes for distance
-                for allele_indx, allele_group in alleleDict[target_id]["allele_groups"].items():
-                    dist_list = [] #We want to keep track of all possible distances between equal chunks of allelotype1 and allelotype2 and choose the minimum
-                    allelotype1 = list(set(alleleDict[target_id]["sample"][sample1]["allelotype"]).intersection(set(allele_group)))
-                    allelotype2 = list(set(alleleDict[target_id]["sample"][sample2]["allelotype"]).intersection(set(allele_group)))
-                    n = min(len(allelotype1), len(allelotype2)) #We want to look the number of alleles used for matching
-                    if n == 0:
-                        continue #skip if at least one of the single cells don't have alleles found within allele_group
-                    for i in range(0, len(allelotype1), n):
-                        temp_allelotype1 = allelotype1[i:i + n]
-                        for j in range(0, len(allelotype2), n):
-                            temp_allelotype2 = allelotype2[j:j + n]
-                            if dist_metric == "EqorNot":
-                                dist =  int(len(set(temp_allelotype1).symmetric_difference(set(temp_allelotype2))) / 2)
-                            elif dist_metric == "Abs":
-                                dist = sum(abs(x - y) for x, y in zip(sorted(temp_allelotype1), sorted(temp_allelotype2))) #This is based on <https://stackoverflow.com/questions/41229052/smallest-sum-of-difference-between-elements-in-two-lists>
-                            dist_list.append(dist)
-                    # print(target_id + "\t" + sample1 + "\t" + sample2 + "\t" + str(allele_indx) + "\t" + ','.join(str(w) for w in allele_group) + "\t" + ','.join(str(x) for x in allelotype1) + "\t" + ','.join(str(y) for y in allelotype2) + "\t" + str(min(dist_list)) + "\t" + str(n))
-                    total_dist += min(dist_list)
-                    num_comp += n
-            elif dist_metric == "Chi": #Option for comparing all msCounts for one SC/mergeSC to another
-                #We want to calculate the frequency of each msCount for the samples
-                all_msCount = set(alleleDict[target_id]["sample"][sample1]["msCount"]).intersection(set(alleleDict[target_id]["sample"][sample2]["msCount"]))
-                # print(target_id + "\t" + sample1 + "\t" + sample2)
-                # print(','.join(str(x) for x in alleleDict[target_id]["sample"][sample1]["msCount"]))
-                # print(','.join(str(x) for x in alleleDict[target_id]["sample"][sample2]["msCount"]))
-                sample1_freq = []
-                sample2_freq = []
-                for msCount in sorted(all_msCount):
-                    sample1_freq.append(alleleDict[target_id]["sample"][sample1]["msCount"].count(msCount))
-                    sample2_freq.append(alleleDict[target_id]["sample"][sample2]["msCount"].count(msCount))
-                sample2_exp = [freq / sum(sample2_freq) * sum(sample1_freq) for freq in sample2_freq]
-                # print(sample1 + "\t" + sample2)
-                # print("\t".join(str(msCount) for msCount in sorted(all_msCount)))
-                # print("\t".join(str(round(freq1, 1)) for freq1 in sample1_freq))
-                # print("\t".join(str(round(freq2, 1)) for freq2 in sample2_exp))
-                if sample1_freq == sample2_exp:
-                    p_value = 1
-                else:
-                    (stat, p_value) = scipy.stats.chisquare(sample1_freq, f_exp=sample2_exp)
-                if p_value == 0:
-                    p_value = 0.0000000001
-                # print(p_value)
-                total_dist += -math.log(p_value, 10)
-                num_comp += 1
+            for allele_indx, allele_group in alleleDict[target_id]["allele_groups"].items():
+                dist_list = [] #We want to keep track of all possible distances between equal chunks of allelotype1 and allelotype2 and choose the minimum
+                allelotype1 = list(set(alleleDict[target_id]["sample"][sample1]["allelotype"]).intersection(set(allele_group)))
+                allelotype2 = list(set(alleleDict[target_id]["sample"][sample2]["allelotype"]).intersection(set(allele_group)))
+                n = min(len(allelotype1), len(allelotype2)) #We want to look the number of alleles used for matching
+                if n == 0:
+                    continue #skip if at least one of the single cells don't have alleles found within allele_group
+                for i in range(0, len(allelotype1), n):
+                    temp_allelotype1 = allelotype1[i:i + n]
+                    for j in range(0, len(allelotype2), n):
+                        temp_allelotype2 = allelotype2[j:j + n]
+                        if dist_metric == "EqorNot":
+                            dist =  int(len(set(temp_allelotype1).symmetric_difference(set(temp_allelotype2))) / 2)
+                        elif dist_metric == "Abs":
+                            dist = sum(abs(x - y) for x, y in zip(sorted(temp_allelotype1), sorted(temp_allelotype2))) #This is based on <https://stackoverflow.com/questions/41229052/smallest-sum-of-difference-between-elements-in-two-lists>
+                        dist_list.append(dist)
+                # print(target_id + "\t" + sample1 + "\t" + sample2 + "\t" + str(allele_indx) + "\t" + ','.join(str(w) for w in allele_group) + "\t" + ','.join(str(x) for x in allelotype1) + "\t" + ','.join(str(y) for y in allelotype2) + "\t" + str(min(dist_list)) + "\t" + str(n))
+                total_dist += min(dist_list)
+                num_comp += n
     else:
         total_dist = 0
         num_comp = len(shared_targets)
@@ -211,7 +185,7 @@ def bootstrapTree(nodeDict, treeTemp, bootstrap_samples):
                 nodeDict[node]["Num_verified"] += 1
     return nodeDict
 
-def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, dist_metric, outgroup, bootstrap, n_merge, bulk_info, bulk_alleleDict_file):
+def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, dist_metric, outgroup, bootstrap, n_merge):
     '''
     Draw phylogenetic tree based on calculated allelotype of single cells.  This is done by:
         1) Filtering out only likely alleles by creating a "pseudo"-bulk in which we cluster all single cell alleles together (calcBulk)
@@ -233,20 +207,6 @@ def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, d
     print("\tMerging SC data")
     alleleDict = mergeSC(raw_alleleDict, targetDict, sampleDict, filtered_samples, n_merge)
 
-    #Import bulk info if available
-    if (bulk_info is not None) and (bulk_alleleDict_file is not None):
-        bulkDict = import_sampleDict(bulk_info)
-        bulkDict["clone"] = {}
-        #We want to extract all bulk_samples that belong to given clone
-        for bulk_sample in sorted(bulkDict.keys()):
-            if bulk_sample != "clone":
-                bulk_clone = bulkDict[bulk_sample]["clone"]
-                if bulk_clone in bulkDict["clone"].keys():
-                    bulkDict["clone"][bulk_clone].append(bulk_sample)
-                else:
-                    bulkDict["clone"][bulk_clone] = [bulk_sample]
-        bulk_alleleDict = pickle.load(open(bulk_alleleDict_file, 'rb'))
-
     #Pre-calculate shared targets between each sample
     print("\tPre-computing shared target_id between each pairwise sample")
     sharedDict = {} #Contains all shared targets between each pairwise sample
@@ -260,15 +220,7 @@ def buildPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, d
                         continue
                     if sample1 in alleleDict[target_id]["sample"].keys() and sample2 in alleleDict[target_id]["sample"].keys() and target_id in targetDict.keys(): #Only want to analyze target_id in targetDict
                         if "allelotype" in alleleDict[target_id]["sample"][sample1].keys() and "allelotype" in alleleDict[target_id]["sample"][sample2].keys():
-                            if (bulk_info is not None) and (bulk_alleleDict_file is not None): #Below are checks for whether bulk HipSTR calls are homozygous
-                                if target_id in bulk_alleleDict.keys():
-                                    for bulk_sample in sorted(bulkDict["clone"][sampleDict[sample1]["clone"]] + bulkDict["clone"][sampleDict[sample2]["clone"]]):
-                                        if bulk_sample in bulk_alleleDict[target_id]["sample"].keys():
-                                            if len(set(bulk_alleleDict[target_id]["sample"][bulk_sample]["allelotype"])) > 1:
-                                                # print(target_id + "\t" + bulk_sample + "\t" + ','.join(str(allele) for allele in bulk_alleleDict[target_id]["sample"][bulk_sample]["allelotype"]))
-                                                continue #We want to skip if any bulk samples belonging to the same clone is heterozygous
-                            else:
-                                shared_targets.append(target_id)
+                            shared_targets.append(target_id)
                 sharedDict[sample_pair] = shared_targets
                 # print("\t".join(sample_pair) + "\t" + str(len(shared_targets)))
 
