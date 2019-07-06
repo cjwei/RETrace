@@ -48,23 +48,31 @@ def calcDist(mergeDict, alleleDict, sample1, sample2, dist_metric):
                 allelotype2 = []
                 for sample in sample2_list:
                     allelotype2.extend(list(set(alleleDict[target_id]["sample"][sample]["allelotype"]).intersection(set(allele_group))))
+                for allele1 in sorted(allelotype1):
+                    for allele2 in sorted(allelotype2):
+                        if dist_metric == "EqorNot":
+                            if allele1 != allele2:
+                                total_dist += 1
+                        elif dist_metric == "Abs":
+                            total_dist += abs(allele1 - allele2)
+                        num_comp += 1
                 # if '&' in sample1 or '&' in sample2:
                 #     print(sample1 + ":" + ','.join(str(x) for x in sorted(allelotype1)) + "\t" + sample2 + ":" + ','.join(str(y) for y in sorted(allelotype2)))
-                n = min(len(allelotype1), len(allelotype2)) #We want to look the number of alleles used for matching
-                if n == 0:
-                    continue #skip if at least one of the single cells don't have alleles found within allele_group
-                for i in range(0, len(allelotype1), n):
-                    temp_allelotype1 = allelotype1[i:i + n]
-                    for j in range(0, len(allelotype2), n):
-                        temp_allelotype2 = allelotype2[j:j + n]
-                        if dist_metric == "EqorNot":
-                            dist =  int(len(set(temp_allelotype1).symmetric_difference(set(temp_allelotype2))) / 2)
-                        elif dist_metric == "Abs":
-                            dist = sum(abs(x - y) for x, y in zip(sorted(temp_allelotype1), sorted(temp_allelotype2))) #This is based on <https://stackoverflow.com/questions/41229052/smallest-sum-of-difference-between-elements-in-two-lists>
-                        dist_list.append(dist)
-                # print(target_id + "\t" + sample1 + "\t" + sample2 + "\t" + str(allele_indx) + "\t" + ','.join(str(w) for w in allele_group) + "\t" + ','.join(str(x) for x in allelotype1) + "\t" + ','.join(str(y) for y in allelotype2) + "\t" + str(min(dist_list)) + "\t" + str(n))
-                total_dist += min(dist_list)
-                num_comp += n
+                # n = min(len(allelotype1), len(allelotype2)) #We want to look the number of alleles used for matching
+                # if n == 0:
+                #     continue #skip if at least one of the single cells don't have alleles found within allele_group
+                # for i in range(0, len(allelotype1), n):
+                #     temp_allelotype1 = allelotype1[i:i + n]
+                #     for j in range(0, len(allelotype2), n):
+                #         temp_allelotype2 = allelotype2[j:j + n]
+                #         if dist_metric == "EqorNot":
+                #             dist =  int(len(set(temp_allelotype1).symmetric_difference(set(temp_allelotype2))) / 2)
+                #         elif dist_metric == "Abs":
+                #             dist = sum(abs(x - y) for x, y in zip(sorted(temp_allelotype1), sorted(temp_allelotype2))) #This is based on <https://stackoverflow.com/questions/41229052/smallest-sum-of-difference-between-elements-in-two-lists>
+                #         dist_list.append(dist)
+                # # print(target_id + "\t" + sample1 + "\t" + sample2 + "\t" + str(allele_indx) + "\t" + ','.join(str(w) for w in allele_group) + "\t" + ','.join(str(x) for x in allelotype1) + "\t" + ','.join(str(y) for y in allelotype2) + "\t" + str(min(dist_list)) + "\t" + str(n))
+                # total_dist += min(dist_list)
+                # num_comp += n
     #We want to save this into distDict
     mergeDict["distDict"]['&'.join(sorted([sample1, sample2]))] = float(total_dist / num_comp)
     return mergeDict
