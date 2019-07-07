@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os
+os.environ['QT_QPA_PLATFORM']='offscreen' #Fix for remote ssh tree render <https://github.com/etetoolkit/ete/issues/387>
 from RETrace.MS.utilities import import_sampleDict
 from ete3 import Tree, TreeStyle, TextFace, NodeStyle #Call ETE toolkit <http://etetoolkit.org/docs/latest/tutorial/index.html>
 

@@ -40,11 +40,17 @@ def import_sampleDict(info_file):
                 sampleDict[sample]["sex"] = sex
                 sampleDict[sample]["clone"] = clone
                 sampleDict[sample]["clone_color"] = clone_color
+            elif len(line.split()) == 4: #If clone is specified
+                (bam, sample, sex, clone) = line.split()
+                sampleDict[sample] = {}
+                sampleDict[sample]["bam"] = bam
+                sampleDict[sample]["sex"] = sex
+                sampleDict[sample]["clone"] = clone
             elif len(line.split()) == 3: #If clone is not specified
                 (bam, sample, sex) = line.split()
                 sampleDict[sample] = {}
                 sampleDict[sample]["bam"] = bam
                 sampleDict[sample]["sex"] = sex
             else:
-                print("Incorrect formatting for line (bam, sample, sex, [optional] clone):\n" + "\t".join(line.split()))
+                print("Incorrect formatting for line (bam, sample, sex, [optional] clone, [optional] clone_color):\n" + "\t".join(line.split()))
     return sampleDict

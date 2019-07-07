@@ -86,7 +86,7 @@ def mergeClosest(mergeDict, alleleDict, dist_metric):
                 if potential_node not in mergeDict["distDict"].keys():
                     mergeDict = calcDist(mergeDict, alleleDict, sample1, sample2, dist_metric)
                 if mergeDict["distDict"][potential_node] <= min_dist:
-                    print(potential_node + "\t" + str(mergeDict["distDict"][potential_node]))
+                    # print(potential_node + "\t" + str(mergeDict["distDict"][potential_node]))
                     min_dist = mergeDict["distDict"][potential_node]
                     mergeNode = potential_node
                     mergeChildren = sorted([sample1, sample2])
@@ -99,7 +99,7 @@ def mergeClosest(mergeDict, alleleDict, dist_metric):
     mergeDict["leafDict"][mergeNode] = mergeLeaves
     #Update nodeDict with the children of hte merged node
     mergeDict["nodeDict"][mergeNode] = mergeChildren
-    print("----------Chosen node:----------\n" + mergeNode + "\n" + ','.join(mergeChildren))
+    # print("----------Chosen node:----------\n" + mergeNode + "\n" + ','.join(mergeChildren))
     return mergeDict
 
 def iterPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, dist_metric):

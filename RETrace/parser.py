@@ -57,8 +57,10 @@ def parse_args():
 
     elif args.command == "buildPhylo":
         from RETrace.MS.buildPhylo import buildPhylo
-        buildPhylo(args.sample_info, args.sample_list, args.prefix, args.target_info,
-            args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap, args.merge)
+        buildPhylo(args.sample_info, args.f_sample_list, args.prefix, args.target_info,
+            args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap)
+        # buildPhylo(args.sample_info, args.sample_list, args.prefix, args.target_info,
+        #     args.alleleDict_file, args.dist_metric, args.outgroup, args.bootstrap, args.merge) #We want to deprecate the mergeSC function
 
     elif args.command == "iterPhylo":
         from RETrace.MS.iterPhylo import iterPhylo
@@ -223,7 +225,7 @@ def add_buildPhylo_subparser(subparsers):
     parser_buildPhylo_req = parser_buildPhylo.add_argument_group("required inputs")
     parser_buildPhylo_req.add_argument("--sample_list",
         action="store",
-        dest="sample_list",
+        dest="f_sample_list",
         help="File containing sample names to be included in calculations (one sample per line)")
     parser_buildPhylo_req.add_argument("--prefix",
         action="store",
@@ -258,11 +260,11 @@ def add_buildPhylo_subparser(subparsers):
         action="store_true",
         default=False,
         help="Flag for indicating whether we want to bootstrap the tree to determine node support (random sampling across all samples)")
-    parser_buildPhylo_opt.add_argument("--merge",
-        action="store",
-        default=1,
-        type=int,
-        help="Indicate the number of single cells to merge together (based on clone/cluster as specified in sample_info file)")
+    # parser_buildPhylo_opt.add_argument("--merge",
+    #     action="store",
+    #     default=1,
+    #     type=int,
+    #     help="Indicate the number of single cells to merge together (based on clone/cluster as specified in sample_info file)")
 
 def add_iterPhylo_subparser(subparsers):
     # create the parser for "iterPhylo" comand

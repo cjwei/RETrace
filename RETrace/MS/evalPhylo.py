@@ -11,7 +11,7 @@ import random
 import pickle
 manager = multiprocessing.Manager()
 
-def multi_calcTriplets(triplet_group, NJTree, rootDist_pd, cloneDict, tripletDict):
+def multi_calcTriplets(triplet_group, NJTree, rootDist_pd, sampleDict, tripletDict):
     for triplet in tqdm(triplet_group):
         tree_dist = []
         ref_dist = []
@@ -19,7 +19,7 @@ def multi_calcTriplets(triplet_group, NJTree, rootDist_pd, cloneDict, tripletDic
             MRCA = NJTree.get_common_ancestor([triplet[sample_pair[0]], triplet[sample_pair[1]]])
             MRCA_dist = NJTree.get_distance(MRCA)
             tree_dist.append(MRCA_dist)
-            ref_dist.append(rootDist_pd.loc[cloneDict[triplet[sample_pair[0]]]][cloneDict[triplet[sample_pair[1]]]])
+            ref_dist.append(rootDist_pd.loc[sampleDict[triplet[sample_pair[0]]]["clone"]][sampleDict[triplet[sample_pair[1]]]["clone"]])
         #We want to save the count information in encoded string treeDict[triplet]: ref_dist,[1 (correct) or 0 (incorrect)]
         if tree_dist.index(max(tree_dist)) == ref_dist.index(max(ref_dist)): #If using MRCA depth as comparison metric
             tripletDict[triplet] = str(max(ref_dist)) + ",1"
@@ -82,17 +82,6 @@ def evalPhylo(sample_info, prefix, exVivo_rootDist, tree_file, nproc, distDict_f
     sampleDict = import_sampleDict(sample_info)
     #We want to extract only the clone information for sampleDict
     distDict = pickle.load(open(distDict_file, 'rb'))
-    cloneDict = {}
-    for mergeSC in distDict["mergeSC"]:
-        sample_list = mergeSC.split('&')
-        clone_list = []
-        for sample in sample_list:
-            clone_list.append(sampleDict[sample]["clone"])
-        if len(set(clone_list)) > 1:
-            print("Error: Merged SC do not belong to sample clone")
-            return
-        else:
-            cloneDict[mergeSC] = clone_list[0]
 
     #Import exVivo tree distances into pandas dataframe
     rootDist_pd = pd.read_csv(exVivo_rootDist, delimiter=',', index_col=0)
@@ -107,12 +96,12 @@ def evalPhylo(sample_info, prefix, exVivo_rootDist, tree_file, nproc, distDict_f
     jobs = []
     triplet_set = set()
     print("Naming all triplets in tree")
-    for sample1 in tqdm(distDict["mergeSC"]):
-        clone1 = cloneDict[sample1]
-        for sample2 in sorted(distDict["mergeSC"]):
-            clone2 = cloneDict[sample2]
-            for sample3 in sorted(distDict["mergeSC"]):
-                clone3 = cloneDict[sample3]
+    for sample1 in tqdm(distDict["samples"]):
+        clone1 = sampleDict[sample1]["clone"]
+        for sample2 in sorted(distDict["samples"]):
+            clone2 = sampleDict[sample2]["clone"]
+            for sample3 in sorted(distDict["samples"]):
+                clone3 = sampleDict[sample3]["clone"]
                 triplet = tuple(sorted([sample1, sample2, sample3]))
                 if len(set([clone1, clone2, clone3])) >= 2 and len(set(triplet)) == 3:
                 # if len(set([clone1, clone2, clone3])) == 3 and triplet not in triplet_list: #We want only triplets where each of the three leaves stem from different clones
@@ -122,7 +111,7 @@ def evalPhylo(sample_info, prefix, exVivo_rootDist, tree_file, nproc, distDict_f
     print("Calculating correct triplet rate")
     random.shuffle(triplet_list) #We want to randomize in order to even processing time
     for triplet_group in [triplet_list[i::nproc] for i in range(nproc)]:
-        p = multiprocessing.Process(target = multi_calcTriplets, args = (triplet_group, NJTree, rootDist_pd, cloneDict, tripletDict))
+        p = multiprocessing.Process(target = multi_calcTriplets, args = (triplet_group, NJTree, rootDist_pd, sampleDict, tripletDict))
         jobs.append(p)
         p.start()
     #Join tripletDict
