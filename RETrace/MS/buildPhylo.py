@@ -113,8 +113,9 @@ def drawTree(distDict, alleleDict, sample_list, outgroup, prefix, bootstrap):
             sample_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
     if bootstrap is False: #Only output statistics for distance and number targets shared if for original tree (don't output for bootstrap resampling)
         statsOutput = open(prefix + ".buildPhylo.stats.txt", 'w')
-        statsOutput.write("Avg targets shared per pair of cells:\t" + str(float(sum(pairwise_numTargets) / len(pairwise_numTargets))) + "\n")
-        statsOutput.write("Avg targets captured per single cell:\t" + str(float(sum(sample_numTargets) / len(sample_numTargets))) + "\n")
+        statsOutput.write("Number of Samples Analyzed:\t" + str(len(sample_list)) + "\n" + ','.join(sample_list) + "\n")
+        statsOutput.write("Avg targets shared per pair of cells:\t" + str(float(sum(pairwise_numTargets) / len(pairwise_numTargets))) + "\t[" + str(min(pairwise_numTargets)) + "," + str(max(pairwise_numTargets)) + "]\n")
+        statsOutput.write("Avg targets captured per single cell:\t" + str(float(sum(sample_numTargets) / len(sample_numTargets))) + "\t[" + str(min(sample_numTargets)) + "," + str(max(sample_numTargets)) + "]\n")
         for dist_indx,dist_list in enumerate(distMatrix): #Print matrix containing distances
             statsOutput.write(sorted(sample_list)[dist_indx] + "," + ",".join(str(round(i,3)) for i in dist_list) + "\n")
         for target_indx,target_list in enumerate(targetMatrix): #Print matrix containing number targets shared between each pair
@@ -129,7 +130,11 @@ def drawTree(distDict, alleleDict, sample_list, outgroup, prefix, bootstrap):
     else:
         if outgroup == "Midpoint":
             tree_midpoint = ete_tree.get_midpoint_outgroup()
-            ete_tree.set_outgroup(tree_midpoint)
+            if tree_midpoint is not None:
+                ete_tree.set_outgroup(tree_midpoint)
+            else:
+                print(ete_tree.write(format = 0))
+                return None #We want to throw out tree if midpoint was not found
         else:
             ete_tree.set_outgroup(outgroup)
     return ete_tree
@@ -190,6 +195,7 @@ def buildPhylo(sample_info, f_sample_list, prefix, target_info, alleleDict_file,
                         if "allelotype" in alleleDict[target_id]["sample"][sample1].keys() and "allelotype" in alleleDict[target_id]["sample"][sample2].keys():
                             shared_targets.append(target_id)
                 sharedDict[sample_pair] = shared_targets
+                # print(','.join(sample_pair) + "\t" + str(len(shared_targets)))
 
     #Calculate original tree using all samples found within sampleDict
     print("\tCalculating distance matrix for each pairwise comparison and drawing original Newick tree (no bootstrap)")
@@ -212,13 +218,14 @@ def buildPhylo(sample_info, f_sample_list, prefix, target_info, alleleDict_file,
             nodeDict[tuple(sorted(leaf_list))]["Num_verified"] = 0 #Contains values for number of times random bootstrap tree (tree_temp) contains given node
             nodeDict[tuple(sorted(leaf_list))]["Num_sampled"] = 0 #Contains number of times the node occured during bootstrap resampling
             # nodeDict[tuple(sorted(leaf_list))]["NodeID"] = node.write(format = 9)
-        for i in tqdm(range(10000)): #Bootstrap resample 10,000 times
+        for i in tqdm(range(1000)): #Bootstrap resample 1,000 times
             #Random downsample from pool of available targets (target_list) to use for distance calculation
             bootstrap_samples = set(np.random.choice(sample_list, len(sample_list), replace=True))
             if outgroup not in ["Midpoint", "NA"]: #We want to make sure our outgroup remains in the tree even during bootstraping
                 bootstrap_samples.add(outgroup)
             tree_temp = drawTree(distDict_original, alleleDict, bootstrap_samples, outgroup, prefix, bootstrap)
-            nodeDict = bootstrapTree(nodeDict, tree_temp, bootstrap_samples) #Determine whether each node in original tree is found in tree_temp
+            if tree_temp is not None:
+                nodeDict = bootstrapTree(nodeDict, tree_temp, bootstrap_samples) #Determine whether each node in original tree is found in tree_temp
         #Add support information to original tree
         for node in MStree.search_nodes():
             leaf_list = []

@@ -39,4 +39,4 @@ def viewPhylo(sample_info, tree_file, prefix, bootstrap):
     # ts.arc_span = 180
     if bootstrap is True:
         ts.show_branch_support = True
-    MStree.render(prefix + ".buildPhylo.pdf", tree_style=ts)
+    MStree.render(prefix + ".viewPhylo.pdf", tree_style=ts)
