@@ -3,20 +3,22 @@ import pickle
 import pybedtools
 from tqdm import tqdm
 import gzip
+import os
 
 def CGIstats(methDict, ref_CGI):
-    for sample_name in sorted(methDict["sample"].keys()):
+    for sample_name in tqdm(sorted(methDict["sample"].keys())):
         methDict["sample"][sample_name]["CGI"] = {}
-        sample_bed = pybedtools.BedTool(methDict["sample"][sample_name]["bam_file"])
-        ref_bed = pybedtools.BedTool(ref_CGI)
-        CGI_intersect = ref_bed.intersect(sample_bed, bed=True, wa=True, wb=True)
-        for CGI in CGI_intersect:
-            CGI_loc = CGI.fields[0] + ":" + CGI.fields[1] + "-" + CGI.fields[2]
-            read_name = CGI.fields[7]
-            if CGI_loc not in methDict["sample"][sample_name]["CGI"].keys():
-                methDict["sample"][sample_name]["CGI"][CGI_loc] = 1
-            else:
-                methDict["sample"][sample_name]["CGI"][CGI_loc] += 1
+        if os.path.isfile(methDict["sample"][sample_name]["bam_file"]): #If bam file does not exist (i.e. dummy file is provided), then skip
+            sample_bed = pybedtools.BedTool(methDict["sample"][sample_name]["bam_file"])
+            ref_bed = pybedtools.BedTool(ref_CGI)
+            CGI_intersect = ref_bed.intersect(sample_bed, bed=True, wa=True, wb=True)
+            for CGI in CGI_intersect:
+                CGI_loc = CGI.fields[0] + ":" + CGI.fields[1] + "-" + CGI.fields[2]
+                read_name = CGI.fields[7]
+                if CGI_loc not in methDict["sample"][sample_name]["CGI"].keys():
+                    methDict["sample"][sample_name]["CGI"][CGI_loc] = 1
+                else:
+                    methDict["sample"][sample_name]["CGI"][CGI_loc] += 1
     return methDict
 
 def calcStats(methDict, prefix):
@@ -108,9 +110,13 @@ def importMethyl(sample_info, prefix, ref_CGI):
     methDict = parseMethCall(methDict)
 
     #Export methDict prior to calculating stats file
+    print("Exporting methylDict to:\t" + prefix + ".methDict.pkl")
     with open(prefix + ".methDict.pkl", 'wb') as methDict_file:
         pickle.dump(methDict, methDict_file, protocol=pickle.HIGHEST_PROTOCOL)
 
     #We also want to calculate methylation coverage stats
+    print("Calculating methyl coverage stats")
+    print("\tDetermine CGI stats")
     methDict = CGIstats(methDict, ref_CGI)
+    print("\tDeterminign CpG stats")
     calcStats(methDict, prefix)

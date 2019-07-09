@@ -43,21 +43,31 @@ def calcDist(alleleDict, distDict, sample_pair, sample1, sample2, shared_targets
                 dist_list = [] #We want to keep track of all possible distances between equal chunks of allelotype1 and allelotype2 and choose the minimum
                 allelotype1 = list(set(alleleDict[target_id]["sample"][sample1]["allelotype"]).intersection(set(allele_group)))
                 allelotype2 = list(set(alleleDict[target_id]["sample"][sample2]["allelotype"]).intersection(set(allele_group)))
-                n = min(len(allelotype1), len(allelotype2)) #We want to look the number of alleles used for matching
-                if n == 0:
-                    continue #skip if at least one of the single cells don't have alleles found within allele_group
-                for i in range(0, len(allelotype1), n):
-                    temp_allelotype1 = allelotype1[i:i + n]
-                    for j in range(0, len(allelotype2), n):
-                        temp_allelotype2 = allelotype2[j:j + n]
+                # n = min(len(allelotype1), len(allelotype2)) #We want to look the number of alleles used for matching
+                # if n == 0:
+                #     continue #skip if at least one of the single cells don't have alleles found within allele_group
+                # for i in range(0, len(allelotype1), n):
+                #     temp_allelotype1 = allelotype1[i:i + n]
+                #     for j in range(0, len(allelotype2), n):
+                #         temp_allelotype2 = allelotype2[j:j + n]
+                #         if dist_metric == "EqorNot":
+                #             dist =  int(len(set(temp_allelotype1).symmetric_difference(set(temp_allelotype2))) / 2)
+                #         elif dist_metric == "Abs":
+                #             dist = sum(abs(x - y) for x, y in zip(sorted(temp_allelotype1), sorted(temp_allelotype2))) #This is based on <https://stackoverflow.com/questions/41229052/smallest-sum-of-difference-between-elements-in-two-lists>
+                #         dist_list.append(dist)
+                # # print(target_id + "\t" + sample1 + "\t" + sample2 + "\t" + str(allele_indx) + "\t" + ','.join(str(w) for w in allele_group) + "\t" + ','.join(str(x) for x in allelotype1) + "\t" + ','.join(str(y) for y in allelotype2) + "\t" + str(min(dist_list)) + "\t" + str(n))
+                # total_dist += min(dist_list)
+                # num_comp += n
+
+                #Edit 7/8/2019: We want to compare all alleles from allelotype1 vs allelotype2 (not necessarily just limit to min num comparisons possible)
+                for allele1 in sorted(allelotype1):
+                    for allele2 in sorted(allelotype2):
                         if dist_metric == "EqorNot":
-                            dist =  int(len(set(temp_allelotype1).symmetric_difference(set(temp_allelotype2))) / 2)
+                            if allele1 != allele2:
+                                total_dist += 1
                         elif dist_metric == "Abs":
-                            dist = sum(abs(x - y) for x, y in zip(sorted(temp_allelotype1), sorted(temp_allelotype2))) #This is based on <https://stackoverflow.com/questions/41229052/smallest-sum-of-difference-between-elements-in-two-lists>
-                        dist_list.append(dist)
-                # print(target_id + "\t" + sample1 + "\t" + sample2 + "\t" + str(allele_indx) + "\t" + ','.join(str(w) for w in allele_group) + "\t" + ','.join(str(x) for x in allelotype1) + "\t" + ','.join(str(y) for y in allelotype2) + "\t" + str(min(dist_list)) + "\t" + str(n))
-                total_dist += min(dist_list)
-                num_comp += n
+                            total_dist += abs(allele1 - allele2)
+                        num_comp += 1
     else:
         total_dist = 0
         num_comp = len(shared_targets)
@@ -105,12 +115,12 @@ def drawTree(distDict, alleleDict, sample_list, outgroup, prefix, bootstrap):
             sample_pair = tuple(sorted([sample1, sample2]))
             sample1_dist.append(distDict["sampleComp"][sample_pair]["dist"])
             sample1_targets.append(distDict["sampleComp"][sample_pair]["num_targets"])
+            if sample1 != sample2:
+                pairwise_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
+            else:
+                sample_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
         distMatrix.append(sample1_dist)
         targetMatrix.append(sample1_targets)
-        if sample1 != sample2:
-            pairwise_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
-        else:
-            sample_numTargets.append(distDict["sampleComp"][sample_pair]["num_targets"])
     if bootstrap is False: #Only output statistics for distance and number targets shared if for original tree (don't output for bootstrap resampling)
         statsOutput = open(prefix + ".buildPhylo.stats.txt", 'w')
         statsOutput.write("Number of Samples Analyzed:\t" + str(len(sample_list)) + "\n" + ','.join(sample_list) + "\n")
