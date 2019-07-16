@@ -99,7 +99,7 @@ def mergeClosest(mergeDict, alleleDict, dist_metric):
     mergeDict["leafDict"][mergeNode] = mergeLeaves
     #Update nodeDict with the children of hte merged node
     mergeDict["nodeDict"][mergeNode] = mergeChildren
-    # print("----------Chosen node:----------\n" + mergeNode + "\n" + ','.join(mergeChildren))
+    print("----------Chosen node:----------\n" + mergeNode + "\n" + ','.join(mergeChildren))
     return mergeDict
 
 def iterPhylo(sample_info, sample_list, prefix, target_info, alleleDict_file, dist_metric):

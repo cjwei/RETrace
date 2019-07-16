@@ -250,7 +250,7 @@ def add_buildPhylo_subparser(subparsers):
         action="store",
         dest="dist_metric",
         default="EqorNot",
-        help="Specify distance metric for pairwise comparisons [Abs, EqorNot]")
+        help="Specify distance metric for pairwise comparisons [Abs_minComp/allComp, EqorNot_minComp/allComp]")
     parser_buildPhylo_opt.add_argument("--outgroup",
         action="store",
         dest="outgroup",

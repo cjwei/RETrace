@@ -4,6 +4,9 @@ import argparse
 from tqdm import tqdm
 import gzip
 import itertools
+import random
+import os
+import pickle
 
 def parseMS(sampleDict, f_target):
     '''
@@ -66,8 +69,12 @@ def printStats(sampleDict, prefix, min_MS, min_Methyl):
     #We also want to determine the number of target_id and base_loc that are present from merging 2-4 single cells together
     f_out_merge = open(prefix + '.mergeStats.txt', 'w')
     f_out_merge.write("sample_merge\tnum_merge\tnum_MS\tnum_Methyl\n")
-    for n_merge in [2, 10]:
-        for sample_merge in tqdm(itertools.combinations(sampleDict.keys(), n_merge)):
+    for n_merge in [10, 2]:
+        SC_samples = [sample_name for sample_name in sampleDict.keys() if "SC" in sample_name]
+        merge_pool = tuple(itertools.combinations(SC_samples, n_merge))
+        print(len(merge_pool))
+        merge_indices = sorted(random.sample(len(merge_pool), 1000))
+        for sample_merge in tqdm(merge_pool[indices]):
             MS_analyzed = set()
             num_MS = 0
             for sample_name in sample_merge:
@@ -103,23 +110,25 @@ def calcStats():
     args = parser.parse_args()
 
     #Import sample_info
-    sampleDict = {}
-    with open(args.sample_info, 'r') as f_info:
-        for line in f_info:
-            (sample_name, MS_bam, Methyl_tsv) = line.rstrip().split()
-            sampleDict[sample_name] = {}
-            sampleDict[sample_name]["MS"] = {}
-            sampleDict[sample_name]["MS"]["bam"] = MS_bam
-            sampleDict[sample_name]["MS"]["depthDict"] = {} #Contains target_id as keys and num reads as values
-            sampleDict[sample_name]["Methyl"] = {}
-            sampleDict[sample_name]["Methyl"]["tsv"] = Methyl_tsv
-            sampleDict[sample_name]["Methyl"]["depthDict"] = {} #Contains CpG base_loc as keys and num reads as values
-
-    #Import MS statistics
-    sampleDict = parseMS(sampleDict, args.f_target)
-
-    #Import Methyl statistics
-    sampleDict = parseMethyl(sampleDict)
+    if not os.path.isfile(args.prefix + ".sampleDict.pkl"):
+        sampleDict = {}
+        with open(args.sample_info, 'r') as f_info:
+            for line in f_info:
+                (sample_name, MS_bam, Methyl_tsv) = line.rstrip().split()
+                sampleDict[sample_name] = {}
+                sampleDict[sample_name]["MS"] = {}
+                sampleDict[sample_name]["MS"]["bam"] = MS_bam
+                sampleDict[sample_name]["MS"]["depthDict"] = {} #Contains target_id as keys and num reads as values
+                sampleDict[sample_name]["Methyl"] = {}
+                sampleDict[sample_name]["Methyl"]["tsv"] = Methyl_tsv
+                sampleDict[sample_name]["Methyl"]["depthDict"] = {} #Contains CpG base_loc as keys and num reads as values
+        #Import MS statistics
+        sampleDict = parseMS(sampleDict, args.f_target)
+        #Import Methyl statistics
+        sampleDict = parseMethyl(sampleDict)
+        pickle.dump(sampleDict, open(args.prefix + ".sampleDict.pkl", "wb"))
+    else:
+        sampleDict = pickle.load(open(args.prefix + ".sampleDict.pkl", "rb"))
 
     #Calculate number of MS loci and Methyl CpG base_loc per single cell or merge of cells
     printStats(sampleDict, args.prefix, args.min_MS, args.min_Methyl)
