@@ -53,6 +53,7 @@ def parseMethyl(sampleDict):
 
 def printStats(sampleDict, prefix, min_MS, min_Methyl):
     #We want to first print statistics for each single cell (or bulk sample) separately
+    print("Analyzing single cell stats")
     f_out_single = open(prefix + '.singleStats.txt', 'w')
     f_out_single.write("sample_name\tnum_MS\tnum_Methyl\n")
     for sample_name in sorted(sampleDict.keys()):
@@ -65,16 +66,33 @@ def printStats(sampleDict, prefix, min_MS, min_Methyl):
             if sampleDict[sample_name]["Methyl"]["depthDict"][base_loc] >= min_Methyl:
                 num_Methyl += 1
         f_out_single.write(sample_name + "\t" + str(num_MS) + "\t" + str(num_Methyl) + "\n")
+    f_out_single.close()
 
     #We also want to determine the number of target_id and base_loc that are present from merging 2-4 single cells together
     f_out_merge = open(prefix + '.mergeStats.txt', 'w')
     f_out_merge.write("sample_merge\tnum_merge\tnum_MS\tnum_Methyl\n")
-    for n_merge in [10, 2]:
+    for n_merge in [2, 10]:
         SC_samples = [sample_name for sample_name in sampleDict.keys() if "SC" in sample_name]
-        merge_pool = tuple(itertools.combinations(SC_samples, n_merge))
-        print(len(merge_pool))
-        merge_indices = sorted(random.sample(len(merge_pool), 1000))
-        for sample_merge in tqdm(merge_pool[indices]):
+
+        # #We want to perform reservoir downsampling of all possible combinations of single cell samples to produce a random sampling of 1000 merged samples
+        # merge_list = []
+        # for indx, sample_merge in tqdm(enumerate(itertools.combinations(SC_samples, n_merge))):
+        #     merge_name = ';'.join(sample_merge)
+        #     if indx < 1000:
+        #         merge_list.append(merge_name)
+        #     elif indx >= 1000 and random.random() < 1000/float(indx + 1):
+        #         replace_indx = random.randint(0, len(merge_list) - 1)
+        #         merge_list[replace_indx] = merge_name
+
+        #We want to randomly build merge_list from the ground up
+        print("Analyzing merged single cells:\t" + str(n_merge))
+        merge_set = set()
+        while len(merge_set) < 1000:
+            merge_name = ';'.join(sorted(random.sample(SC_samples, n_merge)))
+            merge_set.add(merge_name)
+
+        for merge_name in sorted(merge_set):
+            sample_merge = merge_name.split(';')
             MS_analyzed = set()
             num_MS = 0
             for sample_name in sample_merge:
