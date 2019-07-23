@@ -45,19 +45,24 @@ def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min_share
     cellType_list = []
     PDdict = {}
     PDdict["PD"] = {}
+    PDdict["numCpG"] = {}
     PD_output = open(prefix + ".PD.txt", 'w')
     PD_output.write("Sample\tCell Type\tPairwise Dissimilarity\tNum CpG Shared\n")
     for sample_name in sorted(PDdict_temp.keys()):
         PD_list = []
+        num_list = [] #This contains the number of CpG sites compared
         for cellType_name in sorted(PDdict_temp[sample_name].keys()):
             if len(PDdict_temp[sample_name][cellType_name]) >= min_shared:
                 pairwise_dist = float(sum(PDdict_temp[sample_name][cellType_name])/len(PDdict_temp[sample_name][cellType_name]))
                 PD_output.write(sample_name + "\t" + cellType_name + "\t" + str(round(pairwise_dist, 4)) + "\t" + str(len(PDdict_temp[sample_name][cellType_name])) + "\n")
                 PD_list.append(pairwise_dist)
+                num_list.append(len(PDdict_temp[sample_name][cellType_name]))
                 cellType_list.append(cellType_name)
             else:
                 PD_list.append(0)
+                num_list.append(0)
         PDdict["PD"][sample_name] = PD_list
+        PDdict["numCpG"][sample_name] = num_list
     PD_output.close()
     PDdict["index"] = sorted(list(set(cellType_list))) #This contains cell type names used for pandas dataframe index
     #Export PDdict to file using pickle
@@ -71,8 +76,11 @@ def plotPD(PDdict, prefix):
         if len(PDdict["PD"][sample_name]) < len(PDdict["index"]):
             # print(sample_name + "\t" + ','.join(str(i) for i in PDdict["PD"][sample_name]))
             PDdict["PD"].pop(sample_name, None)
+            PDdict["numCpG"].pop(sample_name, None)
     PD_df = pandas.DataFrame(PDdict["PD"], index=sorted(PDdict["index"]))
+    numCpG_df = pandas.DataFrame(PDdict["numCpG"], index=sorted(PDdict["index"]))
 
+    #We want to plot heatmaps of the PD comparison between cells and cell type
     sns.set(font_scale=0.5)
     print("Drawing clustermap for raw PD")
     PD_clustermap = sns.clustermap(PD_df, xticklabels=True)
@@ -85,6 +93,12 @@ def plotPD(PDdict, prefix):
     print("Drawing clustermap for Z-score across cell types")
     PD_clustermap_z_cellType = sns.clustermap(PD_df, z_score=0, xticklabels=True) #Draw clustermap based on z-scores of each row (i.e. cell type)
     PD_clustermap_z_cellType.savefig(prefix + ".PD.z_cellType.eps", format="eps", dpi=1000)
+
+    #We want to plot heatmaps of the numCpG comparison between cells and cell type
+    print("Drawing clustermap for numCpG")
+    numCpG_clustermap = sns.clustermap(numCpG_df, xticklabels=True)
+    numCpG_clustermap.savefig(prefix + ".numCpG.eps", format="eps", dpi=1000)
+
     return
 
 def refPD(sample_list, ref_info, sample_methDict, prefix, DMR, reg, min_shared, min_rate):

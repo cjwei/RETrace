@@ -44,23 +44,30 @@ def filterReg(tsv_file, regDict, output_file):
             if chr.replace('chr','') in regDict.keys():
                 if int(pos) in regDict[chr.replace('chr','')].keys():
                     tsv_output.write(line.rstrip() + "\t" + regDict[chr.replace('chr','')][int(pos)] + "\n")
+                else:
+                    tsv_output.write(line)
             else:
                 tsv_output.write(line) #We want to keep the CpG information line in the file, but without label of Reg.  This allows us to have options for downstream analysis
     return
 
 def main():
     parser = argparse.ArgumentParser(description="Annotate methlyation singal found in Ensembl regulatory build windows")
-    parser.add_argument('--tsv', action="store", dest="tsv_file", help="Original methylpy tsv file for all CGN")
+    parser.add_argument('--tsv', action="store", dest="file_list", nargs='+', help="Original methylpy tsv file for all CGN")
     parser.add_argument('--reg_file', action="store", dest="reg_file", help="Gff file containing Ensembl regulatory build information")
     parser.add_argument('--reg_pkl', action="store", dest="reg_pkl", help="Specify if regDict pickle file is already made")
-    parser.add_argument('--output', action="store", dest="output_file", help="Filename for output filtered tsv file")
     args = parser.parse_args()
 
     if os.path.exists(args.reg_pkl):
+        print("Loading regDict")
         regDict = pickle.load(open(args.reg_pkl, 'rb'))
     else:
+        print("Creating regDict")
         regDict = importReg(args.reg_file, args.reg_pkl)
-    filterReg(args.tsv_file, regDict, args.output_file)
+
+    for tsv_file in args.file_list:
+        print("Processing:\t" + tsv_file)
+        output_file = tsv_file.replace('.tsv','.reg.tsv')
+        filterReg(tsv_file, regDict, output_file)
 
 if __name__ == "__main__":
     main()
