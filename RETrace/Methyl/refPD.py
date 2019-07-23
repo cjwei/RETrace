@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use('Agg')
 import seaborn as sns
 
-def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, min_shared, min_rate, prefix):
+def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min_shared, min_rate, prefix):
     #We want to iterate through all cell types and calculate pairwise dissimilarity when compared to all samples
     PDdict_temp = {} #Keep all pairwise dissimilarity comparisons in temp dictionary
     for cellType_name in sorted(typeDict["cellType"].keys()):
@@ -26,6 +26,8 @@ def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, min_shared, min_rat
                 continue
             if DMR_bool is True and 'DMR' not in line:
                 continue #Skip base_loc if not contained within DMR and DMR_bool is set to True
+            if reg_bool is True and 'reg' not in line:
+                continue #Skip base_loc if not contained within regulatory build window and reg_bool is set to True
             if not min(min_rate, 1 - min_rate) < cellType_methRate < max(min_rate, 1 - min_rate): #Only consider base locations in which reference methRate is not between (min_rate, 1-min_rate)
                 if base_loc in sampleDict["base"].keys(): #We next want to search matching base_loc in sampleDict
                     for sample_name in sampleDict["base"][base_loc]:
@@ -85,7 +87,7 @@ def plotPD(PDdict, prefix):
     PD_clustermap_z_cellType.savefig(prefix + ".PD.z_cellType.eps", format="eps", dpi=1000)
     return
 
-def refPD(sample_list, ref_info, sample_methDict, prefix, DMR, min_shared, min_rate):
+def refPD(sample_list, ref_info, sample_methDict, prefix, DMR, reg, min_shared, min_rate):
     '''
     This script is based off of SingleC_MetLevel.pl from Guo 2015 Nat Prot paper <https://doi.org/10.1038/nprot.2015.039> and Paiwise Dissimilarity calculations from Hui 2018 Stem Cell Reports paper <https://doi.org/10.1016/j.stemcr.2018.07.003>.
     It will take as input methylation info for single cell samples and reference cellt ypes in order to calculate the pairwise dissimilarity between each
@@ -111,7 +113,7 @@ def refPD(sample_list, ref_info, sample_methDict, prefix, DMR, min_shared, min_r
 
         #Calculate pairwise dissimilarity matrix
         print("Calculating PD between single cells and cell type")
-        PDdict = calcPD(sampleDict, typeDict, filtered_samples, DMR, int(min_shared), float(min_rate), prefix)
+        PDdict = calcPD(sampleDict, typeDict, filtered_samples, DMR, reg, int(min_shared), float(min_rate), prefix)
     else:
         print("Importing pre-computed PDdict")
         with open(prefix + ".PD.pkl", 'rb') as PDdict_f:

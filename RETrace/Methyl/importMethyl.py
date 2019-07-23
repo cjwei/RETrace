@@ -118,5 +118,5 @@ def importMethyl(sample_info, prefix, ref_CGI):
     print("Calculating methyl coverage stats")
     print("\tDetermine CGI stats")
     methDict = CGIstats(methDict, ref_CGI)
-    print("\tDeterminign CpG stats")
+    print("\tDetermining CpG stats")
     calcStats(methDict, prefix)

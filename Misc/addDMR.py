@@ -29,7 +29,7 @@ def importDMR(DMR_file):
             DMR_name = "DMR:" + chr + ':' + start + '-' + end
             if chr.replace('chr','') not in DMRdict.keys():
                 DMRdict[chr.replace('chr','')] = {}
-            for pos in range(int(start), int(end) + 1): #We want to interate through all base positions within DMR range
+            for pos in range(int(start), int(end) + 1): #We want to iterate through all base positions within DMR range
                 DMRdict[chr.replace('chr','')][pos] = DMR_name
     return DMRdict
 

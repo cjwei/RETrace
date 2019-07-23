@@ -81,7 +81,7 @@ def parse_args():
 
     elif args.command == "refPD":
         from RETrace.Methyl.refPD import refPD
-        refPD(args.sample_list, args.ref_info, args.sample_methDict, args.prefix, args.DMR, args.min_shared, args.min_rate)
+        refPD(args.sample_list, args.ref_info, args.sample_methDict, args.prefix, args.DMR, args.reg, args.min_shared, args.min_rate)
 
     elif args.command == "pairwise_methRate":
         from RETrace.Methyl.pairwise_methRate import pairwise_methRate
@@ -419,7 +419,12 @@ def add_refPD_subparser(subparsers):
         action="store_true",
         dest="DMR",
         default=False,
-        help="Flag to constrain bases of interest in refernce file to DMR regions")
+        help="Flag to constrain bases of interest in reference file to DMR regions")
+    parser_refPD_opt.add_argument("-reg",
+        action="store_true",
+        dest="reg",
+        default=False,
+        help="Flag to constrain bases of interest in reference file to Ensembl regulatory build windows")
     parser_refPD_opt.add_argument("--min_shared",
         action="store",
         dest="min_shared",

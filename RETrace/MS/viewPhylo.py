@@ -33,7 +33,6 @@ def viewPhylo(sample_info, tree_file, prefix, bootstrap):
 
     ts = TreeStyle()
     ts.show_leaf_name = True
-    ts.show_leaf_name = True
     # ts.mode = "c"
     # ts.arc_start = -180 # 0 degrees = 3 o'clock
     # ts.arc_span = 180
