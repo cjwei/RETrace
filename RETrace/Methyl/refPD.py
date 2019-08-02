@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use('Agg')
 import seaborn as sns
 
-def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min_shared, min_rate, prefix):
+def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min_shared, min_rate, min_reads, prefix):
     #We want to iterate through all cell types and calculate pairwise dissimilarity when compared to all samples
     PDdict_temp = {} #Keep all pairwise dissimilarity comparisons in temp dictionary
     for cellType_name in sorted(typeDict["cellType"].keys()):
@@ -32,14 +32,16 @@ def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min_share
                 if base_loc in sampleDict["base"].keys(): #We next want to search matching base_loc in sampleDict
                     for sample_name in sampleDict["base"][base_loc]:
                         if sample_name in filtered_samples: #Only analyze samples of interest
-                            #We want to calculate pairwise dissimilarity between sample and cellType and save into PDdict_temp
-                            sample_methRate = float(sampleDict["base"][base_loc][sample_name][0] / sampleDict["base"][base_loc][sample_name][1])
-                            dis = abs(sample_methRate - cellType_methRate) * 100
-                            if sample_name not in PDdict_temp.keys():
-                                PDdict_temp[sample_name] = {}
-                            if cellType_name not in PDdict_temp[sample_name].keys():
-                                PDdict_temp[sample_name][cellType_name] = []
-                            PDdict_temp[sample_name][cellType_name].append(dis)
+                            if sampleDict["base"][base_loc][sample_name][1] >= min_reads:
+                                #We want to calculate pairwise dissimilarity between sample and cellType and save into PDdict_temp
+                                sample_methRate = float(sampleDict["base"][base_loc][sample_name][0] / sampleDict["base"][base_loc][sample_name][1])
+                                # if not min(min_rate, 1 - min_rate) < sample_methRate < max(min_rate, 1 - min_rate): #We also want to only consider base locations in which sample is not between (min_rate, 1-min_rate)
+                                dis = abs(sample_methRate - cellType_methRate) * 100
+                                if sample_name not in PDdict_temp.keys():
+                                    PDdict_temp[sample_name] = {}
+                                if cellType_name not in PDdict_temp[sample_name].keys():
+                                    PDdict_temp[sample_name][cellType_name] = []
+                                PDdict_temp[sample_name][cellType_name].append(dis)
         f_cellType.close()
     #Save pairwise dissimilarity into PDdict for future processing/plotting
     cellType_list = []
@@ -90,18 +92,22 @@ def plotPD(PDdict, prefix):
     PD_clustermap_z_sample = sns.clustermap(PD_df, z_score=1, xticklabels=True) #Draw clustermap based on z-scores of each column (i.e. sample input) with lower z-score indicating higher similarity (lower PD)
     PD_clustermap_z_sample.savefig(prefix + ".PD.z_sample.eps", format="eps", dpi=1000)
 
-    print("Drawing clustermap for Z-score across cell types")
-    PD_clustermap_z_cellType = sns.clustermap(PD_df, z_score=0, xticklabels=True) #Draw clustermap based on z-scores of each row (i.e. cell type)
-    PD_clustermap_z_cellType.savefig(prefix + ".PD.z_cellType.eps", format="eps", dpi=1000)
+    # print("Drawing clustermap for Z-score across cell types")
+    # PD_clustermap_z_cellType = sns.clustermap(PD_df, z_score=0, xticklabels=True) #Draw clustermap based on z-scores of each row (i.e. cell type)
+    # PD_clustermap_z_cellType.savefig(prefix + ".PD.z_cellType.eps", format="eps", dpi=1000)
 
     #We want to plot heatmaps of the numCpG comparison between cells and cell type
     print("Drawing clustermap for numCpG")
     numCpG_clustermap = sns.clustermap(numCpG_df, xticklabels=True)
     numCpG_clustermap.savefig(prefix + ".numCpG.eps", format="eps", dpi=1000)
 
+    print("Drawing clustermap for numCpG with Z-score across samples")
+    numCpG_clustermap_z_sample = sns.clustermap(numCpG_df, z_score=1, xticklabels=True)
+    numCpG_clustermap_z_sample.savefig(prefix + ".numCpG.z_sample.eps", format="eps", dpi=1000)
+
     return
 
-def refPD(sample_list, ref_info, sample_methDict, prefix, DMR, reg, min_shared, min_rate):
+def refPD(sample_list, ref_info, sample_methDict, prefix, DMR, reg, min_shared, min_rate, min_reads):
     '''
     This script is based off of SingleC_MetLevel.pl from Guo 2015 Nat Prot paper <https://doi.org/10.1038/nprot.2015.039> and Paiwise Dissimilarity calculations from Hui 2018 Stem Cell Reports paper <https://doi.org/10.1016/j.stemcr.2018.07.003>.
     It will take as input methylation info for single cell samples and reference cellt ypes in order to calculate the pairwise dissimilarity between each
@@ -127,7 +133,7 @@ def refPD(sample_list, ref_info, sample_methDict, prefix, DMR, reg, min_shared, 
 
         #Calculate pairwise dissimilarity matrix
         print("Calculating PD between single cells and cell type")
-        PDdict = calcPD(sampleDict, typeDict, filtered_samples, DMR, reg, int(min_shared), float(min_rate), prefix)
+        PDdict = calcPD(sampleDict, typeDict, filtered_samples, DMR, reg, int(min_shared), float(min_rate), int(min_reads), prefix)
     else:
         print("Importing pre-computed PDdict")
         with open(prefix + ".PD.pkl", 'rb') as PDdict_f:

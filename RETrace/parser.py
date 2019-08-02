@@ -81,7 +81,7 @@ def parse_args():
 
     elif args.command == "refPD":
         from RETrace.Methyl.refPD import refPD
-        refPD(args.sample_list, args.ref_info, args.sample_methDict, args.prefix, args.DMR, args.reg, args.min_shared, args.min_rate)
+        refPD(args.sample_list, args.ref_info, args.sample_methDict, args.prefix, args.DMR, args.reg, args.min_shared, args.min_rate, args.min_reads)
 
     elif args.command == "pairwise_methRate":
         from RETrace.Methyl.pairwise_methRate import pairwise_methRate
@@ -437,6 +437,12 @@ def add_refPD_subparser(subparsers):
         default=0.5,
         type=float,
         help="Minimum methylated or unmethylated rate for cellType reference for filtering confident methyl calls (0.5 = no filtering; 1 = only perfect call)")
+    parser_refPD_opt.add_argument("--min_reads",
+        action="store",
+        dest="min_reads",
+        default=1,
+        type=int,
+        help="Minimum number of reads in each single cell sample")
 
 def add_methRate_subparser(subparsers):
     # create the parser for "pairwise_methRate" command

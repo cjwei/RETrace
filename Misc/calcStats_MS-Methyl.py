@@ -95,21 +95,29 @@ def printStats(sampleDict, prefix, min_MS, min_Methyl):
             sample_merge = merge_name.split(';')
             MS_analyzed = set()
             num_MS = 0
+            num_sharedMS = 0
             for sample_name in sample_merge:
                 for target_id in sampleDict[sample_name]["MS"]["depthDict"].keys():
                     if target_id not in MS_analyzed:
                         if sampleDict[sample_name]["MS"]["depthDict"][target_id] >= min_MS:
                             MS_analyzed.add(target_id)
                             num_MS += 1
+                    else:
+                        if sampleDict[sample_name]["MS"]["depthDict"][target_id] >= min_MS:
+                            num_sharedMS += 1
             Methyl_analyzed = set()
             num_Methyl = 0
+            num_sharedMethyl = 0
             for sample_name in sample_merge:
                 for base_loc in sampleDict[sample_name]["Methyl"]["depthDict"].keys():
                     if base_loc not in Methyl_analyzed:
                         if sampleDict[sample_name]["Methyl"]["depthDict"][base_loc] >= min_Methyl:
                             Methyl_analyzed.add(base_loc)
                             num_Methyl += 1
-            f_out_merge.write(','.join(sample_merge) + "\t" + str(n_merge) + "\t" + str(num_MS) + "\t" + str(num_Methyl) + "\n")
+                    else:
+                        if sampleDict[sample_name]["Methyl"]["depthDict"][base_loc] >= min_Methyl:
+                            num_sharedMethyl += 1
+            f_out_merge.write(','.join(sample_merge) + "\t" + str(n_merge) + "\t" + str(num_MS) + "\t" + str(num_sharedMS) + "\t" + str(num_Methyl) + "\t" + str(num_sharedMethyl) + "\n")
     return
 
 def calcStats():
