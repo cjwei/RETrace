@@ -27,10 +27,17 @@ def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min_share
                 cellType_methRate = float(int(meth)/int(total_reads))
             else:
                 continue
-            if DMR_bool is True and 'DMR' not in line:
-                continue #Skip base_loc if not contained within DMR and DMR_bool is set to True
-            if reg_bool is True and 'reg' not in line:
-                continue #Skip base_loc if not contained within regulatory build window and reg_bool is set to True
+            region_set = set()
+            if DMR_bool is True:
+                if 'DMR' not in line:
+                    continue #Skip base_loc if not contained within DMR and DMR_bool is set to True
+                else:
+                    region_set.update([region for region in base_info[7:] if 'DMR' in region])
+            if reg_bool is True:
+                if 'reg' not in line:
+                    continue #Skip base_loc if not contained within regulatory build window and reg_bool is set to True
+                else:
+                    region_set.update([region for region in base_info[7:] if 'reg' in region])
             if not min(min_rate, 1 - min_rate) < cellType_methRate < max(min_rate, 1 - min_rate): #Only consider base locations in which reference methRate is not between (min_rate, 1-min_rate)
                 if base_loc in sampleDict["base"].keys(): #We next want to search matching base_loc in sampleDict
                     for sample_name in sampleDict["base"][base_loc]:
@@ -43,31 +50,40 @@ def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min_share
                                 if sample_name not in PDdict_temp.keys():
                                     PDdict_temp[sample_name] = {}
                                 if cellType_name not in PDdict_temp[sample_name].keys():
-                                    PDdict_temp[sample_name][cellType_name] = []
-                                PDdict_temp[sample_name][cellType_name].append(dis)
+                                    PDdict_temp[sample_name][cellType_name] = {}
+                                    PDdict_temp[sample_name][cellType_name]["PD"] = []
+                                    PDdict_temp[sample_name][cellType_name]["region"] = set()
+                                PDdict_temp[sample_name][cellType_name]["PD"].append(dis)
+                                PDdict_temp[sample_name][cellType_name]["region"].update(region_set)
         f_cellType.close()
     #Save pairwise dissimilarity into PDdict for future processing/plotting
     cellType_list = []
     PDdict = {}
     PDdict["PD"] = {}
     PDdict["numCpG"] = {}
+    PDdict["numRegion"] = {}
     PD_output = open(prefix + ".PD.txt", 'w')
-    PD_output.write("Sample\tCell Type\tPairwise Dissimilarity\tNum CpG Shared\n")
+    PD_output.write("Sample\tCell Type\tPairwise Dissimilarity\tNum CpG Shared\tNum Region Shared\n")
     for sample_name in sorted(PDdict_temp.keys()):
         PD_list = []
-        num_list = [] #This contains the number of CpG sites compared
+        num_CpG = [] #This contains the number of CpG sites compared
+        num_region = [] #This contains the number of regions compared
         for cellType_name in sorted(PDdict_temp[sample_name].keys()):
-            if len(PDdict_temp[sample_name][cellType_name]) >= min_shared:
-                pairwise_dist = float(sum(PDdict_temp[sample_name][cellType_name])/len(PDdict_temp[sample_name][cellType_name]))
-                PD_output.write(sample_name + "\t" + cellType_name + "\t" + str(round(pairwise_dist, 4)) + "\t" + str(len(PDdict_temp[sample_name][cellType_name])) + "\n")
+            if len(PDdict_temp[sample_name][cellType_name]["PD"]) >= min_shared:
+                pairwise_dist = float(sum(PDdict_temp[sample_name][cellType_name]["PD"])/len(PDdict_temp[sample_name][cellType_name]["PD"]))
+                PD_output.write(sample_name + "\t" + cellType_name + "\t" + str(round(pairwise_dist, 4)) + "\t" + str(len(PDdict_temp[sample_name][cellType_name]["PD"])) + "\t" + str(len(PDdict_temp[sample_name][cellType_name]["region"])) + "\n")
                 PD_list.append(pairwise_dist)
-                num_list.append(len(PDdict_temp[sample_name][cellType_name]))
+                num_CpG.append(len(PDdict_temp[sample_name][cellType_name]["PD"]))
+                num_region.append(len(PDdict_temp[sample_name][cellType_name]["region"]))
                 cellType_list.append(cellType_name)
+
             else:
                 PD_list.append("NA")
-                num_list.append(0)
+                num_CpG.append(0)
+                num_region.append(0)
         PDdict["PD"][sample_name] = PD_list
-        PDdict["numCpG"][sample_name] = num_list
+        PDdict["numCpG"][sample_name] = num_CpG
+        PDdict["numRegion"][sample_name] = num_region
     PD_output.close()
     PDdict["index"] = sorted(list(set(cellType_list))) #This contains cell type names used for pandas dataframe index
     #Export PDdict to file using pickle
@@ -137,19 +153,6 @@ def calcPD_merge(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min
     cell_mergeDict.clear() #Clear dictionary to save memory
     sample_mergeDict.clear()
 
-    # print("Intersecting cellType and sample")
-    # PDdict_temp = {} #Keep all pairwise dissimilarity comparisons in temp dictionary
-    # for sample_name in tqdm(sample_mergeDict.keys()):
-    #     PDdict_temp[sample_name] = {}
-    #     for cellType_name in cell_mergeDict.keys():
-    #         PDdict_temp[sample_name][cellType_name] = {}
-    #         region_list = set(sample_mergeDict[sample_name].keys()).intersection(cell_mergeDict[cellType_name].keys())
-    #         for region in region_list:
-    #             if len(sample_mergeDict[sample_name][region]["methRate"]) >= min_CpG and len(cell_mergeDict[cellType_name][region]["methRate"]) >= min_CpG:
-    #                 PDdict_temp[sample_name][cellType_name][region] = {}
-    #                 PDdict_temp[sample_name][cellType_name][region]["sample"] = np.asarray(sample_mergeDict[sample_name][region]["methRate"])
-    #                 PDdict_temp[sample_name][cellType_name][region]["ref"] = np.asarray(cell_mergeDict[cellType_name][region]["methRate"])
-
     #Save pairwise dissimilarity into PDdict for future processing/plotting
     cellType_list = []
     PDdict = {}
@@ -187,6 +190,7 @@ def calcPD_merge(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min
             numRegion_list.append(numRegion)
             numCpG_list.append(numCpG)
             cellType_list.append(cellType_name)
+            PD_output.write(sample_name + "\t" + cellType_name + "\t" + str(pairwise_dist) + "\t" + str(numRegion) + "\t" + str(numCpG) + "\n")
         PDdict["PD"][sample_name] = PD_list
         PDdict["numRegion"][sample_name] = numRegion_list
         PDdict["numCpG"][sample_name] = numCpG_list
