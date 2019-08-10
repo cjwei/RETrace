@@ -81,7 +81,7 @@ def parse_args():
 
     elif args.command == "refPD":
         from RETrace.Methyl.refPD import refPD
-        refPD(args.sample_list, args.ref_info, args.sample_methDict, args.prefix, args.DMR, args.reg, args.min_shared, args.min_rate, args.min_reads)
+        refPD(args.sample_list, args.ref_info, args.sample_methDict, args.prefix, args.DMR, args.reg, args.merge, args.min_shared, args.min_rate, args.min_reads, args.min_CpG)
 
     elif args.command == "pairwise_methRate":
         from RETrace.Methyl.pairwise_methRate import pairwise_methRate
@@ -425,6 +425,11 @@ def add_refPD_subparser(subparsers):
         dest="reg",
         default=False,
         help="Flag to constrain bases of interest in reference file to Ensembl regulatory build windows")
+    parser_refPD_opt.add_argument("-merge",
+        action="store_true",
+        dest="merge",
+        default=False,
+        help="Flag to merge/average methylation calls within DMR/reg windows together and compare across shared genomic regions")
     parser_refPD_opt.add_argument("--min_shared",
         action="store",
         dest="min_shared",
@@ -443,6 +448,12 @@ def add_refPD_subparser(subparsers):
         default=1,
         type=int,
         help="Minimum number of reads in each single cell sample")
+    parser_refPD_opt.add_argument("--min_CpG",
+        action="store",
+        dest="min_CpG",
+        default=1,
+        type=int,
+        help="Minimum number of CpG per region in merge PD")
 
 def add_methRate_subparser(subparsers):
     # create the parser for "pairwise_methRate" command

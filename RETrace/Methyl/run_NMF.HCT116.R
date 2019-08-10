@@ -5,7 +5,9 @@ library(dplyr)
 library(Rtsne)
 
 ## Read counts
-counts <- read.table("/media/Scratch_SSD/cjwei/20190409_HCT116/Methyl/4_methRate/SC-filtered_only.methRate.csv",
+#counts <- read.table("/media/Scratch_SSD/cjwei/20190409_HCT116/Methyl/4_methRate/SC-filtered_only.methRate.csv",
+#                     sep = ",", header = T, row.names = 1, check.names = F)
+counts <- read.table("/media/Scratch_SSD/cjwei/20190409_HCT116/Methyl/4_methRate/cellLine-only.methRate.csv",
                      sep = ",", header = T, row.names = 1, check.names = F)
 counts <- as.matrix(counts)
 
@@ -37,15 +39,15 @@ tsne <- Rtsne(t(cell.scores), perplexity = 5) #Choose perplexity according to <h
 row.names(tsne$Y) <- colnames(cell.scores)
 
 ## Pull out some labels (you can change this depending on what you want to extract)
-labels <- sapply(colnames(cell.scores), ExtractField, field = 1:2, delim = "_")
-#labels <- sapply(colnames(cell.scores), ExtractField)
-#labels <- sapply(colnames(cell.scores), ExtractField, field = 2, delim = "\\.")
-#labels <- sapply(labels, ExtractField, field = 1, delim = "_")
+#labels <- sapply(colnames(cell.scores), ExtractField, field = 1:2, delim = "_")
+labels <- sapply(colnames(cell.scores), ExtractField, field = 1, delim = "_")
+
 
 ## Plot results
-pdf(file = "/media/Scratch_SSD/cjwei/20190409_HCT116/Methyl/4_methRate/SC-filtered_only.methRate.pdf")
+#pdf(file = "/media/Scratch_SSD/cjwei/20190409_HCT116/Methyl/4_methRate/SC-filtered_only.methRate.pdf")
+pdf(file = "/media/Scratch_SSD/cjwei/20190409_HCT116/Methyl/4_methRate/cellLine-only.methRate.pdf")
 
-PlotDims(umap.emb, sample.groups = labels, x.lab = "umap1", y.lab = "umap2", main.title = "HCT116 Single Cell Methylation (UMAP)", pt.size = 3, do.label = F)
-PlotDims(tsne$Y, sample.groups = labels, x.lab = "tsne1", y.lab = "tsne2", main.title = "HCT116 Single Cell Methylation (tSNE)", pt.size = 3, do.label = F)
+PlotDims(umap.emb, sample.groups = labels, x.lab = "umap1", y.lab = "umap2", main.title = "HCT116 Single Cell Methylation (UMAP)", pt.size = 3, do.label = T, show.legend = F)
+PlotDims(tsne$Y, sample.groups = labels, x.lab = "tsne1", y.lab = "tsne2", main.title = "HCT116 Single Cell Methylation (tSNE)", pt.size = 3, do.label = T, show.legend = F)
 
 dev.off()
