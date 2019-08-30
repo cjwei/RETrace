@@ -82,7 +82,7 @@ def parseMethCall(methDict):
                     methDict["sample"][sample_name]["num_CpG"] += 1 #Keep track of the nubmer of CpG sites for each sampe with >=1 read coverage
     return methDict
 
-def importMethyl(sample_info, prefix, ref_CGI):
+def importMethyl(sample_info, prefix, ref_CGI, methylOutput_file):
     '''
     This script will import all CpG methylation signal from sample tsv files into a methDict dictionary to speed up processing of pairwise dissimilarity calculation.
     The structure of the outputted methDict is as follows:
@@ -114,9 +114,23 @@ def importMethyl(sample_info, prefix, ref_CGI):
     with open(prefix + ".methDict.pkl", 'wb') as methDict_file:
         pickle.dump(methDict, methDict_file, protocol=pickle.HIGHEST_PROTOCOL)
 
+    #We also want to output the methylation calls for all samples (for publication)
+    if methylOutput_file:
+        f_output = open(methylOutput_file, 'w')
+        f_output.write("base_loc\t" + "\t".join(sorted(methDict["sample"].keys())) + "\n")
+        for base_loc in sorted(methDict["base"].keys()):
+            f_output.write(base_loc + "\t")
+            for sample in sorted(methDict["sample"].keys()):
+                if sample in methDict["base"][base_loc].keys():
+                    f_output.write(str(methDict["base"][base_loc][sample][0]) + "," + str(methDict["base"][base_loc][sample][1]) + "\t")
+                else:
+                    f_output.write('.,.' + "\t")
+            f_output.write("\n")
+        f_output.close()
+
     #We also want to calculate methylation coverage stats
     print("Calculating methyl coverage stats")
-    print("\tDetermine CGI stats")
+    print("\tCalculating CGI stats")
     methDict = CGIstats(methDict, ref_CGI)
     print("\tDetermining CpG stats")
     calcStats(methDict, prefix)

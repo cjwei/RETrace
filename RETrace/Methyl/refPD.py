@@ -9,6 +9,7 @@ matplotlib.use('Agg')
 import seaborn as sns
 from statistics import mean
 import numpy as np
+from scipy import stats
 import re
 
 def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min_shared, min_rate, min_reads, prefix):
@@ -76,11 +77,10 @@ def calcPD(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min_share
                 num_CpG.append(len(PDdict_temp[sample_name][cellType_name]["PD"]))
                 num_region.append(len(PDdict_temp[sample_name][cellType_name]["region"]))
                 cellType_list.append(cellType_name)
-
             else:
                 PD_list.append("NA")
-                num_CpG.append(0)
-                num_region.append(0)
+                num_CpG.append(len(PDdict_temp[sample_name][cellType_name]["PD"]))
+                num_region.append(len(PDdict_temp[sample_name][cellType_name]["region"]))
         PDdict["PD"][sample_name] = PD_list
         PDdict["numCpG"][sample_name] = num_CpG
         PDdict["numRegion"][sample_name] = num_region
@@ -164,6 +164,7 @@ def calcPD_merge(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min
     print("Calculating PD for all samples")
     os.makedirs(prefix + ".stats")
     for sample_name in tqdm(sorted(PDdict_temp.keys())):
+        print(sample_name)
         PD_list = []
         numRegion_list = []
         numCpG_list = []
@@ -174,23 +175,28 @@ def calcPD_merge(sampleDict, typeDict, filtered_samples, DMR_bool, reg_bool, min
             for region in sorted(PDdict_temp[sample_name][cellType_name].keys()):
                 numCpG += len(PDdict_temp[sample_name][cellType_name][region]["sample"])
                 dist = (np.mean(PDdict_temp[sample_name][cellType_name][region]["sample"]) - np.mean(PDdict_temp[sample_name][cellType_name][region]["ref"])) * 100
-                if cellType_name == "HCT116":
-                    if "DMR" in region:
-                        (chrom, chromStart, chromEnd) = re.split(':|-', region)[1:]
-                    elif "reg" in region:
-                        (chrom, chromStart, chromEnd) = re.split(':|-', region)[2:]
-                    stats_output.write("chr" + chrom.replace('chr','')+ "\t" + chromStart + "\t" + chromEnd + "\t" + str(round(dist, 2)) + "\t" + \
-                        str(round(np.mean(PDdict_temp[sample_name][cellType_name][region]["sample"]), 2)) + "\t" + str(round(np.mean(PDdict_temp[sample_name][cellType_name][region]["ref"]), 2)) + "\t" + \
-                        ','.join(str(round(i, 2)) for i in PDdict_temp[sample_name][cellType_name][region]["sample"]) + "\t" + \
-                        ','.join(str(round(j, 2)) for j in PDdict_temp[sample_name][cellType_name][region]["ref"]) + "\n")
+                # if cellType_name == "HCT116":
+                #     if "DMR" in region:
+                #         (chrom, chromStart, chromEnd) = re.split(':|-', region)[1:]
+                #     elif "reg" in region:
+                #         (chrom, chromStart, chromEnd) = re.split(':|-', region)[2:]
+                #     stats_output.write("chr" + chrom.replace('chr','')+ "\t" + chromStart + "\t" + chromEnd + "\t" + str(round(dist, 2)) + "\t" + \
+                #         str(round(np.mean(PDdict_temp[sample_name][cellType_name][region]["sample"]), 2)) + "\t" + str(round(np.mean(PDdict_temp[sample_name][cellType_name][region]["ref"]), 2)) + "\t" + \
+                #         ','.join(str(round(i, 2)) for i in PDdict_temp[sample_name][cellType_name][region]["sample"]) + "\t" + \
+                #         ','.join(str(round(j, 2)) for j in PDdict_temp[sample_name][cellType_name][region]["ref"]) + "\n")
                 pairwise_dist += np.absolute(dist)
             numRegion = len(PDdict_temp[sample_name][cellType_name].keys())
-            if numRegion > 0:
+            if numRegion >= min_shared:
                 PD_list.append(pairwise_dist / numRegion)
-            numRegion_list.append(numRegion)
-            numCpG_list.append(numCpG)
-            cellType_list.append(cellType_name)
-            PD_output.write(sample_name + "\t" + cellType_name + "\t" + str(pairwise_dist) + "\t" + str(numRegion) + "\t" + str(numCpG) + "\n")
+                numRegion_list.append(numRegion)
+                numCpG_list.append(numCpG)
+                cellType_list.append(cellType_name)
+            else:
+                PD_list.append("NA")
+                numRegion_list.append(numRegion)
+                numCpG_list.append(numCpG)
+                cellType_list.append(cellType_name)
+            PD_output.write(sample_name + "\t" + cellType_name + "\t" + str(pairwise_dist / numRegion) + "\t" + str(numRegion) + "\t" + str(numCpG) + "\n")
         PDdict["PD"][sample_name] = PD_list
         PDdict["numRegion"][sample_name] = numRegion_list
         PDdict["numCpG"][sample_name] = numCpG_list
@@ -206,12 +212,22 @@ def plotPD(PDdict, prefix, merge):
     #We want to ensure that the dataframe has the same number of columns (remove sample_name that don't have PD calculated for all reference cell types)
     print("Making PDdict dataframe")
     for sample_name in tqdm(sorted(PDdict["PD"].keys())):
-        if len(PDdict["PD"][sample_name]) < len(PDdict["index"]):
+        if "NA" in PDdict["PD"][sample_name]: #We want to remove samples in which at least one cell line did not meet num_shared criteria
             # print(sample_name + "\t" + ','.join(str(i) for i in PDdict["PD"][sample_name]))
             PDdict["PD"].pop(sample_name, None)
             PDdict["numCpG"].pop(sample_name, None)
             if merge is True:
                 PDdict["numRegion"].pop(sample_name, None)
+    #We want to print out the z-score statistics for each cell line across all single cells
+    zscore_out = open(prefix + ".PD.zscore.txt",'w')
+    for indx, cell_line in enumerate(sorted(PDdict["index"])):
+        PD_array = np.array([])
+        for sample_name in sorted(PDdict["PD"].keys())
+            PD_array = np.append(PD_array, float(PDdict["PD"][sample_name][indx]))
+        zscore_array = stats.zscore(PD_array)
+        zscore_out.write(cell_line + "\t" + str(np.mean(zscore_array)) + "\t" + str(np.std(zscore_array)) + "\n")
+    zscore_out.close()
+    
     PD_df = pandas.DataFrame(PDdict["PD"], index=sorted(PDdict["index"]))
     if merge is False:
         numCpG_df = pandas.DataFrame(PDdict["numCpG"], index=sorted(PDdict["index"]))

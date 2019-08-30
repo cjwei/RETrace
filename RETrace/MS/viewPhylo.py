@@ -32,7 +32,9 @@ def viewPhylo(sample_info, tree_file, prefix, bootstrap):
             # node.add_face(name_face, column=0, position='branch-right')
 
     ts = TreeStyle()
-    ts.show_leaf_name = True
+    # ts.show_leaf_name = True
+    ts.show_leaf_name = False
+    ts.show_branch_support = True
     # ts.mode = "c"
     # ts.arc_start = -180 # 0 degrees = 3 o'clock
     # ts.arc_span = 180

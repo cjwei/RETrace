@@ -41,7 +41,7 @@ def parse_args():
 
     if args.command == "HipSTR_allelotype":
         from RETrace.MS.HipSTR import HipSTR_allelotype
-        HipSTR_allelotype(args.sample_info, args.HipSTR_vcf, args.alleleDict_file,
+        HipSTR_allelotype(args.sample_info, args.HipSTR_vcf, args.alleleDict_file, args.alleleOutput,
             args.fasta_loc, args.picard_loc, args.HipSTR_loc,
             args.target_bed, args.target_info,
             args.min_qual, args.min_reads, args.max_stutter)
@@ -77,7 +77,7 @@ def parse_args():
 
     elif args.command == "importMethyl":
         from RETrace.Methyl.importMethyl import importMethyl
-        importMethyl(args.sample_info, args.prefix, args.ref_CGI)
+        importMethyl(args.sample_info, args.prefix, args.ref_CGI, args.methylOutput)
 
     elif args.command == "refPD":
         from RETrace.Methyl.refPD import refPD
@@ -139,6 +139,10 @@ def add_HipSTR_allelotype_subparser(subparsers):
         help="Location of probe info file")
 
     parser_HipSTR_allelotype_opt = parser_HipSTR_allelotype.add_argument_group("optional inputs")
+    parser_HipSTR_allelotype_opt.add_argument("--alleleOutput",
+        action="store",
+        dest="alleleOutput",
+        help="Specify tabulated output file containing the HipSTR alleltoype calls for each single cell (for publication)")
     parser_HipSTR_allelotype_opt.add_argument("--min_qual",
         action="store",
         dest="min_qual",
@@ -388,6 +392,10 @@ def add_importMethyl_subparser(subparsers):
         action="store",
         dest="ref_CGI",
         help="Bed file containing reference genome CGI locations")
+    parser_importMethyl_req.add_argument("--methylOutput",
+        action="store",
+        dest="methylOutput",
+        help="Specify tabulated output file containing the methylpy calls for each single cell (for publication)")
 
 def add_refPD_subparser(subparsers):
     # create the parser for "refPD" command
@@ -435,7 +443,7 @@ def add_refPD_subparser(subparsers):
         dest="min_shared",
         default=100,
         type=int,
-        help="Minimum number of CpG sites shared between each sample and cell type comparison")
+        help="Minimum number of CpG sites (or regions if merging) shared between each sample and cell type comparison")
     parser_refPD_opt.add_argument("--min_rate",
         action="store",
         dest="min_rate",

@@ -31,7 +31,7 @@ def run_HipSTR(sampleDict, HipSTR_vcf, fasta_loc, picard_loc, HipSTR_loc, target
     subprocess.call(gunzip_command, shell=True)
     return
 
-def parseVCF(sampleDict, targetDict, HipSTR_vcf, alleleDict_file, min_qual, min_reads, max_stutter):
+def parseVCF(sampleDict, targetDict, HipSTR_vcf, alleleDict_file, alleleOutput_file, min_qual, min_reads, max_stutter):
     '''
     Parse HipSTR vcf output into alleleDict with the following structure:
         alleleDict
@@ -45,8 +45,6 @@ def parseVCF(sampleDict, targetDict, HipSTR_vcf, alleleDict_file, min_qual, min_
     '''
     print("Extracting allelotype from HipSTR output")
     alleleDict = {}
-    # f_goodTargets = open(prefix + ".goodTargets.txt", "w") #This file contains all targets that we kept for alleleDict and subsequent buildPhylo
-    # f_badTargets = open(prefix + ".badTargets.txt", "w") #This file will contain all the targets thrown out during filtering
     with open(HipSTR_vcf) as vcf:
         for line in vcf:
             if not line.startswith('##'):
@@ -79,14 +77,22 @@ def parseVCF(sampleDict, targetDict, HipSTR_vcf, alleleDict_file, min_qual, min_
                                     [msCount, freq] = msCount_info.split('|')
                                     alleleDict[target_id]["sample"][sample]["msCount"].extend([int(msCount)] * int(freq))
                                 alleleDict[target_id]["sample"][sample]["allelotype"] = [int(allele) + ref_MS_len for allele in allelotype.split('|')]
-                            #     f_goodTargets.write(target_id + "\t" + sample + "\t" + "\t".join([allelotype, prob_genotype, num_reads, num_stutter, msCounts]) + "\n")
-                            # else: #We want to print out all targets that are thrown out during filtering
-                            #     f_badTargets.write(target_id + "\t" + sample + "\t" + "\t".join([allelotype, prob_genotype, num_reads, num_stutter, msCounts]) + "\n")
-    # f_goodTargets.close()
-    # f_badTargets.close()
+    #We want to output the allelotype calls into a tabulated file for publication
+    if alleleOutput_file:
+        f_output = open(alleleOutput_file, 'w')
+        f_output.write("targetID\t" + "\t".join(sorted(sample_names)) + "\n")
+        for target_id in sorted(alleleDict.keys()):
+            f_output.write(target_id + "\t")
+            for sample in sorted(sample_names):
+                if sample in alleleDict[target_id]["sample"].keys():
+                    f_output.write('|'.join(str(allele) for allele in alleleDict[target_id]["sample"][sample]["allelotype"]) + "\t")
+                else:
+                    f_output.write('.|.' + "\t")
+            f_output.write("\n")
+        f_output.close()
     return alleleDict
 
-def HipSTR_allelotype(sample_info, HipSTR_vcf, alleleDict_file,
+def HipSTR_allelotype(sample_info, HipSTR_vcf, alleleDict_file, alleleOutput_file,
     fasta_loc, picard_loc, HipSTR_loc,
     target_bed, target_info,
     min_qual, min_reads, max_stutter):
@@ -97,6 +103,7 @@ def HipSTR_allelotype(sample_info, HipSTR_vcf, alleleDict_file,
         HipSTR_loc = directory location containing HipSTR command
         target_bed = location of probe bed file
         target_info = location of probe info file
+    We also want to output the allelotype calls into a tab-delimited file for publication
     '''
     sampleDict = import_sampleDict(sample_info)
 
@@ -108,7 +115,7 @@ def HipSTR_allelotype(sample_info, HipSTR_vcf, alleleDict_file,
 
     #Import HipSTR to alleleDict
     if not os.path.isfile('./' + alleleDict_file):
-        alleleDict = parseVCF(sampleDict, targetDict, HipSTR_vcf, alleleDict_file, min_qual, min_reads, max_stutter)
+        alleleDict = parseVCF(sampleDict, targetDict, HipSTR_vcf, alleleDict_file, alleleOutput_file, min_qual, min_reads, max_stutter)
         pickle.dump(alleleDict, open(alleleDict_file, "wb"))
     else:
         print("Allelotype already available at:\t" + alleleDict_file)

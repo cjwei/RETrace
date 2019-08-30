@@ -68,10 +68,10 @@ labels.NeuNpos <- sapply(colnames(cell.scores.NeuNpos), ExtractField, field = 2,
 #labels <- sapply(labels, ExtractField, field = 1, delim = "_")
 
 ## Plot results
-pdf(file = "/media/Scratch_SSD/cjwei/20190409_Brain/Methyl/3_methRate/20190409_Brain_Methyl.Filter.methRate.pdf")
+pdf(file = "/media/Scratch_SSD/cjwei/20190409_Brain/Methyl/3_methRate/20190409_Brain_Methyl.Filter.methRate.largePoint.pdf")
 
-PlotDims(umap.emb, sample.groups = labels, x.lab = "umap1", y.lab = "umap2", main.title = "All brain cell types (UMAP)")
-PlotDims(tsne$Y, sample.groups = labels, x.lab = "tsne1", y.lab = "tsne2", main.title = "All brain cell types (tSNE)")
+PlotDims(umap.emb, sample.groups = labels, x.lab = "umap1", y.lab = "umap2", main.title = "All brain cell types (UMAP)", pt.size = 3, font.size = 10)
+PlotDims(tsne$Y, sample.groups = labels, x.lab = "tsne1", y.lab = "tsne2", main.title = "All brain cell types (tSNE)", pt.size = 3)
 
 PlotDims(umap.emb.cortex, sample.groups = labels.cortex, x.lab = "umap1", y.lab = "umap2", main.title = "Cortex only (UMAP)")
 PlotDims(tsne.cortex$Y, sample.groups = labels.cortex, x.lab = "tsne1", y.lab = "tsne2", main.title = "Cortex only (tSNE)")
@@ -80,7 +80,7 @@ PlotDims(umap.emb.NeuNpos, sample.groups = labels.NeuNpos, x.lab = "umap1", y.la
 PlotDims(tsne.NeuNpos$Y, sample.groups = labels.NeuNpos, x.lab = "tsne1", y.lab = "tsne2", main.title = "NeuNpos only (tSNE)")
 #We want to label all SC uniquely to get a clearer view of what is happening
 labels.NeuNpos.SC <- sapply(colnames(cell.scores.NeuNpos), ExtractField, field = 4, delim = "\\.")
-PlotDims(umap.emb.NeuNpos, sample.groups = labels.NeuNpos.SC, x.lab = "umap1", y.lab = "umap2", show.legend = F, main.title = "NeuNpos only (UMAP); All SC labeled")
-PlotDims(tsne.NeuNpos$Y, sample.groups = labels.NeuNpos.SC, x.lab = "tsne1", y.lab = "tsne2", show.legend = F, main.title = "NeuNpos only (tSNE); All SC labeled")
+PlotDims(umap.emb.NeuNpos, sample.groups = labels.NeuNpos.SC, x.lab = "umap1", y.lab = "umap2", show.legend = F, main.title = "NeuNpos only (UMAP); All SC labeled", pt.size = 3)
+PlotDims(tsne.NeuNpos$Y, sample.groups = labels.NeuNpos.SC, x.lab = "tsne1", y.lab = "tsne2", show.legend = F, main.title = "NeuNpos only (tSNE); All SC labeled", pt.size = 3)
 
 dev.off()
