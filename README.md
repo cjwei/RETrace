@@ -1,4 +1,4 @@
-# RETrace
+# RETrace: simultaneous retrospective lineage tracing and methylation profiling of single cells (Genome Research; doi:10.1101/gr.255851.119)
 This repo contains multiple tools to perform retrospective lineage tracing and call cell type information from the same single cell using microsatellite and methylation, respectively.  Below is a summary of the analysis tools developed:
 ## Microsatellite Analysis
 - **HipSTR_allelotype**: Run HipSTR for microsatellite calling and allelotyping
